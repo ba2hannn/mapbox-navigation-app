@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "789324675837",
+    "project_id": "rota-app-2024",
+    "storage_bucket": "rota-app-2024.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:789324675837:android:81a3cb4758ddea97cc1c94",
+        "android_client_info": {
+          "package_name": "com.example.flutter_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCxSVqhUl6mQc8dlfT4m1a8851V2qWWx6I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:789324675837:android:9f9846ac8db4536dcc1c94",
+        "android_client_info": {
+          "package_name": "com.example.rotaapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCxSVqhUl6mQc8dlfT4m1a8851V2qWWx6I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

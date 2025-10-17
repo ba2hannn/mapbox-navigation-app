@@ -1,0 +1,51 @@
+name: flutter_app
+description: "Professional Mapbox Navigation Application"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.9.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # Mapbox
+  mapbox_maps_flutter: ^2.3.0
+  
+  # State Management
+  flutter_bloc: ^8.1.6
+  equatable: ^2.0.5
+  
+  # Dependency Injection
+  get_it: ^8.0.2
+  
+  # Functional Programming
+  dartz: ^0.10.1
+  
+  # Location
+  geolocator: ^13.0.2
+  permission_handler: ^11.3.1
+  
+  # Storage
+  shared_preferences: ^2.3.3
+  
+  # HTTP
+  http: ^1.2.0
+  
+  # Firebase
+  firebase_core: ^3.6.0
+  firebase_auth: ^5.3.1
+  cloud_firestore: ^5.4.4
+  firebase_storage: ^12.3.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - assets/
