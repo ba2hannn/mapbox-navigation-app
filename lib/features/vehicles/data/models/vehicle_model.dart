@@ -15,6 +15,9 @@ class VehicleModel extends Vehicle {
     super.imageUrl,
     required super.createdAt,
     required super.updatedAt,
+    super.cityConsumption,
+    super.highwayConsumption,
+    super.isDefault = false,
   });
 
   // From JSON
@@ -32,6 +35,9 @@ class VehicleModel extends Vehicle {
       imageUrl: json['imageUrl'] as String?,
       createdAt: (json['createdAt'] as Timestamp).toDate(),
       updatedAt: (json['updatedAt'] as Timestamp).toDate(),
+      cityConsumption: json['cityConsumption'] as double?,
+      highwayConsumption: json['highwayConsumption'] as double?,
+      isDefault: json['isDefault'] as bool? ?? false,
     );
   }
 
@@ -50,6 +56,9 @@ class VehicleModel extends Vehicle {
       'imageUrl': imageUrl,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
+      'cityConsumption': cityConsumption,
+      'highwayConsumption': highwayConsumption,
+      'isDefault': isDefault,
     };
   }
 
@@ -77,6 +86,9 @@ class VehicleModel extends Vehicle {
       imageUrl: imageUrl,
       createdAt: createdAt,
       updatedAt: updatedAt,
+      cityConsumption: cityConsumption,
+      highwayConsumption: highwayConsumption,
+      isDefault: isDefault,
     );
   }
 }

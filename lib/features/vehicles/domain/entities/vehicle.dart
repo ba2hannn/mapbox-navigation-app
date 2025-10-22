@@ -14,6 +14,13 @@ class Vehicle extends Equatable {
   final DateTime createdAt;
   final DateTime updatedAt;
 
+  // Kişisel tüketim verileri (opsiyonel)
+  final double? cityConsumption; // Şehir içi tüketim (L/100km)
+  final double? highwayConsumption; // Şehir dışı tüketim (L/100km)
+
+  // Varsayılan araç ayarı
+  final bool isDefault;
+
   const Vehicle({
     required this.id,
     required this.userId,
@@ -27,6 +34,9 @@ class Vehicle extends Equatable {
     this.imageUrl,
     required this.createdAt,
     required this.updatedAt,
+    this.cityConsumption,
+    this.highwayConsumption,
+    this.isDefault = false,
   });
 
   @override
@@ -43,5 +53,8 @@ class Vehicle extends Equatable {
         imageUrl,
         createdAt,
         updatedAt,
+        cityConsumption,
+        highwayConsumption,
+        isDefault,
       ];
 }

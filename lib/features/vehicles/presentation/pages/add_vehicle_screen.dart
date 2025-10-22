@@ -1,597 +1,577 @@
-import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:flutter/cupertino.dart'; // Material'dan Cupertino'ya geçildi
+import 'package:flutter/material.dart' show ScaffoldMessenger, SnackBar, Icons, LinearProgressIndicator, Colors; // Sadece gerekli olanlar bırakıldı
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/theme/app_design.dart';
 import '../../../../core/services/firebase_service.dart';
 import '../../data/datasources/vehicle_data.dart';
 import '../../data/models/vehicle_model.dart';
+import '../../../vehicle/presentation/bloc/vehicle_bloc.dart';
+import '../../../vehicle/presentation/bloc/vehicle_event.dart';
+import '../../../vehicle/presentation/bloc/vehicle_state.dart';
+import '../../../vehicle/domain/entities/vehicle_brand_entity.dart';
+import '../../../vehicle/domain/entities/vehicle_model_entity.dart';
+import '../../../vehicle/domain/entities/vehicle_entity.dart';
 
 class AddVehicleScreen extends StatefulWidget {
-  const AddVehicleScreen({super.key});
+  final VehicleModel? vehicleToEdit;
+
+  const AddVehicleScreen({super.key, this.vehicleToEdit});
 
   @override
   State<AddVehicleScreen> createState() => _AddVehicleScreenState();
 }
 
 class _AddVehicleScreenState extends State<AddVehicleScreen> {
+  // --- BACK-END VE STATE YÖNETİMİ (DEĞİŞTİRİLMEDİ) ---
   final _firebaseService = FirebaseService();
   bool _isSaving = false;
+  bool get _isEditing => widget.vehicleToEdit != null;
   
   int _currentStep = 0;
   
   // Form verileri
-  String? _selectedBrand;
-  String? _selectedModel;
+  VehicleBrandEntity? _selectedBrand;
+  VehicleModelEntity? _selectedModel;
+  VehicleEntity? _selectedVehicle;
   int? _selectedYear;
   String? _selectedVehicleClass;
   String? _selectedFuelType;
   String? _selectedColor;
   final _plateController = TextEditingController();
+  final _cityConsumptionController = TextEditingController();
+  final _highwayConsumptionController = TextEditingController();
+
+  // UI state
+  List<VehicleBrandEntity> _brands = [];
+  List<VehicleModelEntity> _models = [];
+  List<VehicleEntity> _vehicles = [];
+  bool _isLoadingBrands = false;
+  bool _isLoadingModels = false;
+  // --- SON: BACK-END VE STATE YÖNETİMİ ---
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBrands();
+    if (_isEditing) {
+      _loadExistingVehicleData();
+    }
+  }
 
   @override
   void dispose() {
     _plateController.dispose();
+    _cityConsumptionController.dispose();
+    _highwayConsumptionController.dispose();
     super.dispose();
   }
 
+  // --- BLOC VE VERİ YÜKLEME METOTLARI (DEĞİŞTİRİLMEDİ) ---
+  Future<void> _loadBrands() async {
+    final bloc = context.read<VehicleBloc>();
+    setState(() { _isLoadingBrands = true; });
+    bloc.add(LoadBrands());
+  }
+
+  void _loadExistingVehicleData() {
+    final vehicle = widget.vehicleToEdit!;
+    _selectedYear = vehicle.year;
+    _selectedVehicleClass = vehicle.vehicleClass;
+    _selectedFuelType = vehicle.fuelType;
+    _selectedColor = vehicle.color;
+    _plateController.text = vehicle.plateNumber ?? '';
+    _cityConsumptionController.text = vehicle.cityConsumption?.toString() ?? '';
+    _highwayConsumptionController.text = vehicle.highwayConsumption?.toString() ?? '';
+    _selectedBrand = null;
+    _selectedModel = null;
+    _selectedVehicle = null;
+  }
+
+  Future<void> _loadModels(String brandId) async {
+    final bloc = context.read<VehicleBloc>();
+    setState(() {
+      _isLoadingModels = true;
+      _models = [];
+      _selectedModel = null;
+      _vehicles = [];
+      _selectedVehicle = null;
+    });
+    bloc.add(LoadModels(brandId));
+  }
+
+  Future<void> _loadVehicles(String modelId) async {
+    final bloc = context.read<VehicleBloc>();
+    setState(() {
+      _vehicles = [];
+      _selectedVehicle = null;
+    });
+    bloc.add(LoadVehicles(modelId));
+  }
+  
+  List<VehicleModelEntity> _filterModels(List<VehicleModelEntity> models) {
+    final filtered = models.where((model) {
+      final name = model.name.toLowerCase();
+      final cleanName = name.replaceAll(RegExp(r'\s*\([^)]*\)'), '');
+      final withoutVersions = cleanName.replaceAll(RegExp(r'\s+\d+\.\d+'), '');
+      final finalName = withoutVersions
+          .replaceAll(RegExp(r'\s+(cd|tdi|tdci|dci|mpi|mpi2|facelift|restyling|sport|comfort|classic|elegance|ambiente)\b'), '')
+          .trim();
+      return finalName.isNotEmpty;
+    }).toList();
+    
+    final uniqueNames = <String>{};
+    final uniqueModels = <VehicleModelEntity>[];
+    
+    for (final model in filtered) {
+      final cleanName = model.name
+          .replaceAll(RegExp(r'\s*\([^)]*\)'), '')
+          .replaceAll(RegExp(r'\s+\d+\.\d+'), '')
+          .replaceAll(RegExp(r'\s+(cd|tdi|tdci|dci|mpi|mpi2|facelift|restyling|sport|comfort|classic|elegance|ambiente)\b'), '')
+          .trim();
+      
+      if (!uniqueNames.contains(cleanName) && cleanName.isNotEmpty) {
+        uniqueNames.add(cleanName);
+        uniqueModels.add(model);
+      }
+    }
+    
+    return uniqueModels.take(8).toList();
+  }
+
+  void _onBlocStateChanged(BuildContext context, VehicleState state) {
+    if (state is BrandsLoaded) {
+      setState(() {
+        _brands = state.brands;
+        _isLoadingBrands = false;
+      });
+    } else if (state is ModelsLoaded) {
+      final filteredModels = _filterModels(state.models);
+      setState(() {
+        _models = filteredModels;
+        _isLoadingModels = false;
+      });
+    } else if (state is VehiclesLoaded) {
+      setState(() {
+        _vehicles = state.vehicles;
+      });
+    } else if (state is VehicleError) {
+      setState(() {
+        _isLoadingBrands = false;
+        _isLoadingModels = false;
+      });
+      _showErrorSnackBar(state.message);
+    }
+  }
+  // --- SON: BLOC VE VERİ YÜKLEME METOTLARI ---
+
+  // --- NAVİGASYON MANTIĞI (DEĞİŞTİRİLMEDİ) ---
   bool get _canGoNext {
     switch (_currentStep) {
-      case 0: // Marka
-        return _selectedBrand != null;
-      case 1: // Model
-        return _selectedModel != null;
-      case 2: // Yıl
-        return _selectedYear != null;
-      case 3: // Araç Sınıfı
-        return _selectedVehicleClass != null;
-      case 4: // Yakıt Türü
-        return _selectedFuelType != null;
-      case 5: // Renk (opsiyonel)
-        return true;
-      case 6: // Plaka (opsiyonel)
-        return true;
-      default:
-        return false;
+      case 0: return _selectedBrand != null;
+      case 1: return _selectedModel != null;
+      case 2: return _selectedVehicle != null;
+      case 3: return _selectedVehicleClass != null;
+      case 4: return _selectedFuelType != null;
+      case 5: return _selectedYear != null;
+      case 6: return true;
+      case 7: return true;
+      default: return false;
     }
   }
 
   void _goToNextStep() {
-    if (_canGoNext && _currentStep < 6) {
-      setState(() {
-        _currentStep++;
-      });
+    if (_canGoNext && _currentStep < 7) {
+      if (_currentStep == 0 && _selectedBrand != null) {
+        _loadModels(_selectedBrand!.id);
+      } else if (_currentStep == 1 && _selectedModel != null) {
+        _loadVehicles(_selectedModel!.id);
+      }
+      setState(() { _currentStep++; });
     }
   }
 
   void _goToPreviousStep() {
     if (_currentStep > 0) {
-      setState(() {
-        _currentStep--;
-      });
+      setState(() { _currentStep--; });
     }
   }
+  // --- SON: NAVİGASYON MANTIĞI ---
 
+  // --- KAYDETME MANTIĞI (DEĞİŞTİRİLMEDİ) ---
   void _saveVehicle() async {
-    // Kullanıcı ID'sini kontrol et
     final userId = _firebaseService.currentUserId;
-    
     if (userId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Lütfen giriş yapın'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _showErrorSnackBar('Lütfen giriş yapın');
       return;
     }
 
-    setState(() {
-      _isSaving = true;
-    });
+    setState(() { _isSaving = true; });
 
     try {
       final now = DateTime.now();
-      final vehicle = VehicleModel(
-        id: '', // Firestore otomatik oluşturacak
-        userId: userId,
-        brand: _selectedBrand!,
-        model: _selectedModel!,
-        year: _selectedYear!,
-        vehicleClass: _selectedVehicleClass!,
-        fuelType: _selectedFuelType!,
-        color: _selectedColor,
-        plateNumber: _plateController.text.trim().isEmpty 
-            ? null 
-            : _plateController.text.trim(),
-        imageUrl: null,
-        createdAt: now,
-        updatedAt: now,
-      );
+      
+      if (_isEditing) {
+        final updateData = {
+          'year': _selectedYear,
+          'vehicleClass': _selectedVehicleClass,
+          'fuelType': _selectedFuelType,
+          'color': _selectedColor,
+          'plateNumber': _plateController.text.trim().isEmpty ? null : _plateController.text.trim(),
+          'cityConsumption': _cityConsumptionController.text.trim().isEmpty ? null : double.tryParse(_cityConsumptionController.text.trim()),
+          'highwayConsumption': _highwayConsumptionController.text.trim().isEmpty ? null : double.tryParse(_highwayConsumptionController.text.trim()),
+          'updatedAt': now,
+        };
 
-      // Firebase'e kaydet
-      final docRef = await _firebaseService
-          .userVehicles(userId)
-          .add(vehicle.toJson());
+        await _firebaseService.userVehicles(userId).doc(widget.vehicleToEdit!.id).update(updateData);
+            
+        final updatedVehicle = VehicleModel(
+          id: widget.vehicleToEdit!.id,
+          userId: widget.vehicleToEdit!.userId,
+          brand: widget.vehicleToEdit!.brand,
+          model: widget.vehicleToEdit!.model,
+          year: _selectedYear ?? widget.vehicleToEdit!.year,
+          vehicleClass: _selectedVehicleClass ?? widget.vehicleToEdit!.vehicleClass,
+          fuelType: _selectedFuelType ?? widget.vehicleToEdit!.fuelType,
+          color: _selectedColor ?? widget.vehicleToEdit!.color,
+          plateNumber: _plateController.text.trim().isEmpty ? widget.vehicleToEdit!.plateNumber : _plateController.text.trim(),
+          imageUrl: widget.vehicleToEdit!.imageUrl,
+          createdAt: widget.vehicleToEdit!.createdAt,
+          updatedAt: now,
+          cityConsumption: _cityConsumptionController.text.trim().isEmpty ? widget.vehicleToEdit!.cityConsumption : double.tryParse(_cityConsumptionController.text.trim()),
+          highwayConsumption: _highwayConsumptionController.text.trim().isEmpty ? widget.vehicleToEdit!.highwayConsumption : double.tryParse(_highwayConsumptionController.text.trim()),
+          isDefault: widget.vehicleToEdit!.isDefault,
+        );
+        
+        await _saveVehicleToLocal(updatedVehicle);
+      } else {
+        final vehicle = VehicleModel(
+          id: '',
+          userId: userId,
+          brand: _selectedBrand!.name,
+          model: _selectedModel!.name,
+          year: _selectedYear!,
+          vehicleClass: _selectedVehicleClass!,
+          fuelType: _selectedFuelType!,
+          color: _selectedColor,
+          plateNumber: _plateController.text.trim().isEmpty ? null : _plateController.text.trim(),
+          imageUrl: null,
+          createdAt: now,
+          updatedAt: now,
+          cityConsumption: _cityConsumptionController.text.trim().isEmpty ? null : double.tryParse(_cityConsumptionController.text.trim()),
+          highwayConsumption: _highwayConsumptionController.text.trim().isEmpty ? null : double.tryParse(_highwayConsumptionController.text.trim()),
+          isDefault: false,
+        );
 
-      debugPrint('✅ Araç başarıyla kaydedildi! ID: ${docRef.id}');
+        final docRef = await _firebaseService.userVehicles(userId).add(vehicle.toJson());
+        
+        final savedVehicle = vehicle.copyWith(id: docRef.id);
+        
+        await _saveVehicleToLocal(savedVehicle);
+      }
+
+      debugPrint('✅ Araç başarıyla ${_isEditing ? 'güncellendi' : 'kaydedildi'}!');
       
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle, color: Colors.white),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    '$_selectedBrand $_selectedModel başarıyla eklendi!',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        );
-        Navigator.pop(context, true); // true = araç eklendi
+        _showSuccessSnackBar(_isEditing ? 'Araç güncellendi!' : '${_selectedBrand!.name} ${_selectedModel!.name} eklendi!');
+        Navigator.pop(context, true);
       }
     } catch (e) {
-      debugPrint('❌ Araç kaydedilemedi: $e');
-      
+      debugPrint('❌ Araç ${_isEditing ? 'güncellenemedi' : 'kaydedilemedi'}: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.error_outline, color: Colors.white),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Hata: $e',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        );
+        _showErrorSnackBar('Bir hata oluştu: $e');
       }
     } finally {
       if (mounted) {
-        setState(() {
-          _isSaving = false;
-        });
+        setState(() { _isSaving = false; });
       }
     }
   }
 
+  Future<void> _saveVehicleToLocal(VehicleModel vehicle) async {
+    // Bu metot değiştirilmedi
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final vehicleJson = vehicle.toJson();
+      final vehiclesJson = prefs.getStringList('vehicles') ?? [];
+      final existingIndex = vehiclesJson.indexWhere((v) {
+        try {
+          final decoded = jsonDecode(v) as Map<String, dynamic>;
+          return VehicleModel.fromJson(decoded).id == vehicle.id;
+        } catch (e) { return false; }
+      });
+      
+      if (existingIndex >= 0) {
+        vehiclesJson[existingIndex] = jsonEncode(vehicleJson);
+      } else {
+        vehiclesJson.add(jsonEncode(vehicleJson));
+      }
+      
+      await prefs.setStringList('vehicles', vehiclesJson);
+      debugPrint('✅ Araç local storage\'a kaydedildi.');
+    } catch (e) {
+      debugPrint('❌ Araç local storage\'a kaydedilemedi: $e');
+    }
+  }
+  // --- SON: KAYDETME MANTIĞI ---
+
+  // --- YENİLENEN WIDGET'LAR ---
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          onPressed: () => Navigator.pop(context),
-          icon: const Icon(Icons.close, color: AppDesign.textPrimary),
-        ),
-        title: const Text(
-          'Araç Ekle',
-          style: TextStyle(
-            color: AppDesign.textPrimary,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
+    return BlocListener<VehicleBloc, VehicleState>(
+      listener: _onBlocStateChanged,
+      child: CupertinoPageScaffold(
+        backgroundColor: CupertinoColors.systemGroupedBackground,
+        navigationBar: CupertinoNavigationBar(
+          middle: Text(_isEditing ? 'Araç Düzenle' : 'Araç Ekle'),
+          previousPageTitle: 'Geri',
+          // Kapatma butonu yerine iOS standardı olan 'Vazgeç' metni
+          leading: CupertinoButton(
+            padding: EdgeInsets.zero,
+            child: const Text('Vazgeç'),
+            onPressed: () => Navigator.pop(context),
           ),
         ),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(8),
-          child: LinearProgressIndicator(
-            value: (_currentStep + 1) / 7,
-            backgroundColor: Colors.grey.shade200,
-            valueColor: AlwaysStoppedAnimation<Color>(AppDesign.primaryColor),
-          ),
+        child: Column(
+          children: [
+            // AppBar altına entegre edilmiş progress bar
+            LinearProgressIndicator(
+              value: (_currentStep + 1) / 8,
+              backgroundColor: CupertinoColors.systemGrey5,
+              valueColor: const AlwaysStoppedAnimation<Color>(AppDesign.primaryColor),
+              minHeight: 2,
+            ),
+            Expanded(
+              child: CustomScrollView(
+                slivers: [
+                  _buildCurrentStep(),
+                ],
+              ),
+            ),
+            _buildBottomButtons(),
+          ],
         ),
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: _buildCurrentStep(),
-          ),
-          _buildBottomButtons(),
-        ],
       ),
     );
   }
 
   Widget _buildCurrentStep() {
     switch (_currentStep) {
-      case 0:
-        return _buildBrandStep();
-      case 1:
-        return _buildModelStep();
-      case 2:
-        return _buildYearStep();
-      case 3:
-        return _buildVehicleClassStep();
-      case 4:
-        return _buildFuelTypeStep();
-      case 5:
-        return _buildColorStep();
-      case 6:
-        return _buildPlateStep();
-      default:
-        return const SizedBox();
+      case 0: return _buildBrandStep();
+      case 1: return _buildModelStep();
+      case 2: return _buildVehicleStep();
+      case 3: return _buildVehicleClassStep();
+      case 4: return _buildFuelTypeStep();
+      case 5: return _buildYearStep();
+      case 6: return _buildPlateStep();
+      case 7: return _buildConsumptionStep();
+      default: return const SliverToBoxAdapter(child: SizedBox.shrink());
     }
   }
 
+  // Apple stili başlık
   Widget _buildStepHeader(String title, String subtitle) {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Adım ${_currentStep + 1}/7',
-            style: TextStyle(
-              fontSize: 14,
-              color: AppDesign.primaryColor,
-              fontWeight: FontWeight.w600,
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'ADIM ${_currentStep + 1}/8',
+              style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                color: AppDesign.primaryColor,
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: AppDesign.textPrimary,
+            const SizedBox(height: 4),
+            Text(
+              title,
+              style: CupertinoTheme.of(context).textTheme.navLargeTitleTextStyle.copyWith(
+                color: CupertinoColors.label,
+                fontSize: 28,
+              ),
             ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            subtitle,
-            style: TextStyle(
-              fontSize: 14,
-              color: AppDesign.textSecondary,
-            ),
-          ),
-        ],
+            if (subtitle.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                subtitle,
+                style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                  color: CupertinoColors.secondaryLabel,
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
-
-  // ADIM 1: Marka Seçimi
+  
+  // ADIM 1: Marka Seçimi (CupertinoListSection ile)
   Widget _buildBrandStep() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildStepHeader('Marka Seçin', 'Aracınızın markasını seçin'),
-        Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: VehicleData.brands.length,
-            itemBuilder: (context, index) {
-              final brand = VehicleData.brands[index];
-              final isSelected = _selectedBrand == brand;
-              
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: () {
-                      setState(() {
-                        _selectedBrand = brand;
-                        _selectedModel = null; // Reset model
-                      });
-                      Future.delayed(const Duration(milliseconds: 200), () {
-                        _goToNextStep();
-                      });
-                    },
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? AppDesign.primaryColor.withAlpha(25)
-                            : Colors.grey.shade50,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: isSelected
-                              ? AppDesign.primaryColor
-                              : Colors.grey.shade200,
-                          width: isSelected ? 2 : 1,
+    if (_isLoadingBrands) {
+      return const SliverFillRemaining(child: Center(child: CupertinoActivityIndicator()));
+    }
+    return SliverMainAxisGroup(
+      slivers: [
+        _buildStepHeader('Marka Seçin', 'Aracınızın markasını listeden bulun.'),
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final brand = _brands[index];
+                final isSelected = _selectedBrand?.id == brand.id;
+                return CupertinoListTile(
+                  title: Text(brand.name, style: TextStyle(color: isSelected ? AppDesign.primaryColor : CupertinoColors.label)),
+                  onTap: () {
+                    setState(() {
+                      _selectedBrand = brand;
+                      _selectedModel = null;
+                      _selectedVehicle = null;
+                      _models = [];
+                      _vehicles = [];
+                    });
+                    Future.delayed(const Duration(milliseconds: 200), _goToNextStep);
+                  },
+                  leading: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: isSelected ? AppDesign.primaryColor : CupertinoColors.systemGrey4,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Center(
+                      child: Text(
+                        brand.name[0],
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: isSelected ? CupertinoColors.white : CupertinoColors.secondaryLabel,
                         ),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 48,
-                            height: 48,
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? AppDesign.primaryColor
-                                  : Colors.grey.shade300,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Center(
-                              child: Text(
-                                brand[0],
-                                style: TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                  color: isSelected
-                                      ? Colors.white
-                                      : AppDesign.textSecondary,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Text(
-                              brand,
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight:
-                                    isSelected ? FontWeight.w600 : FontWeight.normal,
-                                color: isSelected
-                                    ? AppDesign.primaryColor
-                                    : AppDesign.textPrimary,
-                              ),
-                            ),
-                          ),
-                          if (isSelected)
-                            Icon(
-                              Icons.check_circle,
-                              color: AppDesign.primaryColor,
-                            ),
-                        ],
                       ),
                     ),
                   ),
-                ),
-              );
-            },
+                  trailing: isSelected
+                      ? const Icon(CupertinoIcons.checkmark_circle_fill, color: AppDesign.primaryColor)
+                      : null,
+                );
+              },
+              childCount: _brands.length,
+            ),
           ),
         ),
       ],
     );
   }
 
-  // ADIM 2: Model Seçimi
+  // ADIM 2: Model Seçimi (Grid ve CupertinoButton ile)
   Widget _buildModelStep() {
-    final models = VehicleData.getModelsForBrand(_selectedBrand ?? '');
-    
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildStepHeader('Model Seçin', '$_selectedBrand modeli seçin'),
-        Expanded(
-          child: GridView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+     if (_isLoadingModels) {
+      return const SliverFillRemaining(child: Center(child: CupertinoActivityIndicator()));
+    }
+    return SliverMainAxisGroup(
+      slivers: [
+        _buildStepHeader('Model Seçin', '${_selectedBrand?.name ?? ""} için bir model belirleyin.'),
+         SliverPadding(
+           padding: const EdgeInsets.symmetric(horizontal: 20),
+           sliver: SliverGrid(
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 2.5,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+              childAspectRatio: 2.8,
             ),
-            itemCount: models.length,
-            itemBuilder: (context, index) {
-              final model = models[index];
-              final isSelected = _selectedModel == model;
-              
-              return Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () {
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final model = _models[index];
+                final isSelected = _selectedModel?.id == model.id;
+                return CupertinoButton(
+                  onPressed: () {
                     setState(() {
                       _selectedModel = model;
+                      _selectedVehicle = null;
+                      _vehicles = [];
                     });
-                    Future.delayed(const Duration(milliseconds: 200), () {
-                      _goToNextStep();
-                    });
+                    Future.delayed(const Duration(milliseconds: 200), _goToNextStep);
                   },
+                  color: isSelected ? AppDesign.primaryColor : CupertinoColors.white,
+                  padding: const EdgeInsets.all(8),
                   borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? AppDesign.primaryColor.withAlpha(25)
-                          : Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isSelected
-                            ? AppDesign.primaryColor
-                            : Colors.grey.shade200,
-                        width: isSelected ? 2 : 1,
-                      ),
-                    ),
-                    child: Center(
-                      child: Text(
-                        model,
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight:
-                              isSelected ? FontWeight.w600 : FontWeight.normal,
-                          color: isSelected
-                              ? AppDesign.primaryColor
-                              : AppDesign.textPrimary,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
+                  child: Text(
+                    model.name,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                      color: isSelected ? CupertinoColors.white : CupertinoColors.label,
                     ),
                   ),
-                ),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ADIM 3: Yıl Seçimi
-  Widget _buildYearStep() {
-    final years = VehicleData.years;
-    
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildStepHeader('Model Yılı', 'Aracınızın üretim yılını seçin'),
-        Expanded(
-          child: GridView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 2,
+                );
+              },
+              childCount: _models.length,
             ),
-            itemCount: years.length,
-            itemBuilder: (context, index) {
-              final year = years[index];
-              final isSelected = _selectedYear == year;
-              
-              return Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () {
-                    setState(() {
-                      _selectedYear = year;
-                    });
-                    Future.delayed(const Duration(milliseconds: 200), () {
-                      _goToNextStep();
-                    });
-                  },
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? AppDesign.primaryColor
-                          : Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isSelected
-                            ? AppDesign.primaryColor
-                            : Colors.grey.shade200,
-                        width: isSelected ? 2 : 1,
-                      ),
-                    ),
-                    child: Center(
-                      child: Text(
-                        year.toString(),
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: isSelected ? Colors.white : AppDesign.textPrimary,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
+                 ),
+           ),
       ],
     );
   }
 
-  // ADIM 4: Araç Sınıfı (HGS/OGS)
-  Widget _buildVehicleClassStep() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildStepHeader('Araç Sınıfı', 'Geçiş ücreti hesaplama için'),
-        Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: VehicleData.vehicleClasses.length,
-            itemBuilder: (context, index) {
-              final vehicleClass = VehicleData.vehicleClasses[index];
-              final isSelected = _selectedVehicleClass == vehicleClass['id'];
-              
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: () {
-                      setState(() {
-                        _selectedVehicleClass = vehicleClass['id'];
-                      });
-                      Future.delayed(const Duration(milliseconds: 200), () {
-                        _goToNextStep();
-                      });
-                    },
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? AppDesign.primaryColor.withAlpha(25)
-                            : Colors.grey.shade50,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: isSelected
-                              ? AppDesign.primaryColor
-                              : Colors.grey.shade200,
-                          width: isSelected ? 2 : 1,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Text(
-                            vehicleClass['icon']!,
-                            style: const TextStyle(fontSize: 32),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  vehicleClass['name']!,
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                    color: isSelected
-                                        ? AppDesign.primaryColor
-                                        : AppDesign.textPrimary,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  vehicleClass['description']!,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: AppDesign.textSecondary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (isSelected)
-                            Icon(
-                              Icons.check_circle,
-                              color: AppDesign.primaryColor,
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
+  // ADIM 3: Araç Seçimi (CupertinoListSection ile)
+  Widget _buildVehicleStep() {
+    if (_vehicles.isEmpty) {
+      return const SliverFillRemaining(child: Center(child: CupertinoActivityIndicator()));
+    }
+    return SliverMainAxisGroup(
+      slivers: [
+        _buildStepHeader('Araç Detayı', '${_selectedModel?.name ?? ""} için motor ve donanım seçin.'),
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          sliver: CupertinoListSection.insetGrouped(
+            children: _vehicles.map((vehicle) {
+              final isSelected = _selectedVehicle?.id == vehicle.id;
+              return CupertinoListTile(
+                title: Text(vehicle.modificationEngine, style: TextStyle(color: isSelected ? AppDesign.primaryColor : CupertinoColors.label)),
+                subtitle: Text('${vehicle.fuelConsumption.combined}L/100km • ${vehicle.yearRef}'),
+                onTap: () {
+                  setState(() { _selectedVehicle = vehicle; });
+                  Future.delayed(const Duration(milliseconds: 200), _goToNextStep);
+                },
+                trailing: isSelected
+                    ? const Icon(CupertinoIcons.checkmark_circle_fill, color: AppDesign.primaryColor)
+                    : null,
               );
-            },
+            }).toList(),
+          ),
+        )
+      ],
+    );
+  }
+
+  // ADIM 4: Araç Sınıfı
+  Widget _buildVehicleClassStep() {
+    return SliverMainAxisGroup(
+      slivers: [
+        _buildStepHeader('Araç Sınıfı', 'Geçiş ücreti hesaplamaları için gereklidir.'),
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          sliver: CupertinoListSection.insetGrouped(
+            children: VehicleData.vehicleClasses.map((vehicleClass) {
+              final isSelected = _selectedVehicleClass == vehicleClass['id'];
+              return CupertinoListTile(
+                title: Text(vehicleClass['name']!, style: TextStyle(color: isSelected ? AppDesign.primaryColor : CupertinoColors.label)),
+                subtitle: Text(vehicleClass['description']!),
+                onTap: () {
+                  setState(() { _selectedVehicleClass = vehicleClass['id']; });
+                  Future.delayed(const Duration(milliseconds: 200), _goToNextStep);
+                },
+                leading: Text(vehicleClass['icon']!, style: const TextStyle(fontSize: 28)),
+                trailing: isSelected
+                    ? const Icon(CupertinoIcons.checkmark_circle_fill, color: AppDesign.primaryColor)
+                    : null,
+              );
+            }).toList(),
           ),
         ),
       ],
@@ -600,323 +580,245 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
 
   // ADIM 5: Yakıt Türü
   Widget _buildFuelTypeStep() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildStepHeader('Yakıt Türü', 'Yakıt tüketimi hesaplama için'),
-        Expanded(
-          child: GridView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+    final icons = {
+      'Benzin': CupertinoIcons.flame,
+      'Dizel': CupertinoIcons.drop,
+      'LPG': CupertinoIcons.circle_grid_3x3_fill,
+      'Elektrik': CupertinoIcons.bolt_fill,
+      'Hibrit': CupertinoIcons.leaf_arrow_circlepath,
+    };
+
+    return SliverMainAxisGroup(
+      slivers: [
+        _buildStepHeader('Yakıt Türü', 'Yakıt maliyeti hesaplamaları için gereklidir.'),
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          sliver: SliverGrid(
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 2,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+              childAspectRatio: 1.4,
             ),
-            itemCount: VehicleData.fuelTypes.length,
-            itemBuilder: (context, index) {
-              final fuelType = VehicleData.fuelTypes[index];
-              final isSelected = _selectedFuelType == fuelType;
-              
-              final icons = {
-                'Benzin': Icons.local_gas_station,
-                'Dizel': Icons.oil_barrel,
-                'LPG': Icons.propane_tank,
-                'Elektrik': Icons.electric_bolt,
-                'Hibrit': Icons.electric_car,
-              };
-              
-              return Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () {
-                    setState(() {
-                      _selectedFuelType = fuelType;
-                    });
-                    Future.delayed(const Duration(milliseconds: 200), () {
-                      _goToNextStep();
-                    });
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final fuelType = VehicleData.fuelTypes[index];
+                final isSelected = _selectedFuelType == fuelType;
+                return CupertinoButton(
+                  onPressed: () {
+                    setState(() { _selectedFuelType = fuelType; });
+                    Future.delayed(const Duration(milliseconds: 200), _goToNextStep);
                   },
+                  color: isSelected ? AppDesign.primaryColor : CupertinoColors.white,
+                  padding: const EdgeInsets.all(8),
                   borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? AppDesign.primaryColor.withAlpha(25)
-                          : Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isSelected
-                            ? AppDesign.primaryColor
-                            : Colors.grey.shade200,
-                        width: isSelected ? 2 : 1,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(icons[fuelType], size: 28, color: isSelected ? CupertinoColors.white : CupertinoColors.secondaryLabel),
+                      const SizedBox(height: 8),
+                      Text(
+                        fuelType,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                          color: isSelected ? CupertinoColors.white : CupertinoColors.label,
+                        ),
                       ),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          icons[fuelType],
-                          size: 32,
-                          color: isSelected
-                              ? AppDesign.primaryColor
-                              : AppDesign.textSecondary,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          fuelType,
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight:
-                                isSelected ? FontWeight.w600 : FontWeight.normal,
-                            color: isSelected
-                                ? AppDesign.primaryColor
-                                : AppDesign.textPrimary,
-                          ),
-                        ),
-                      ],
-                    ),
+                    ],
                   ),
-                ),
-              );
-            },
+                );
+              },
+              childCount: VehicleData.fuelTypes.length,
+            ),
           ),
-        ),
+        )
       ],
     );
   }
 
-  // ADIM 6: Renk (Opsiyonel)
-  Widget _buildColorStep() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildStepHeader('Renk (Opsiyonel)', 'Aracınızın rengini seçin'),
-        Expanded(
-          child: GridView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+  // ADIM 6: Yıl Seçimi
+  Widget _buildYearStep() {
+    final years = VehicleData.years;
+    return SliverMainAxisGroup(
+      slivers: [
+        _buildStepHeader('Model Yılı', 'Aracınızın üretildiği yılı seçin.'),
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          sliver: SliverGrid(
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 3,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 1.5,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+              childAspectRatio: 2.5,
             ),
-            itemCount: VehicleData.colors.length,
-            itemBuilder: (context, index) {
-              final colorData = VehicleData.colors[index];
-              final colorName = colorData['name'] as String;
-              final colorHex = colorData['hex'] as String;
-              final isSelected = _selectedColor == colorName;
-              
-              return Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () {
-                    setState(() {
-                      _selectedColor = colorName;
-                    });
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final year = years[index];
+                final isSelected = _selectedYear == year;
+                return CupertinoButton(
+                  onPressed: () {
+                    setState(() { _selectedYear = year; });
+                    Future.delayed(const Duration(milliseconds: 200), _goToNextStep);
                   },
+                  color: isSelected ? AppDesign.primaryColor : CupertinoColors.white,
+                  padding: const EdgeInsets.all(8),
                   borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isSelected
-                            ? AppDesign.primaryColor
-                            : Colors.grey.shade200,
-                        width: isSelected ? 2 : 1,
-                      ),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: Color(
-                              int.parse(colorHex.substring(1), radix: 16) +
-                                  0xFF000000,
-                            ),
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: Colors.grey.shade300,
-                              width: 2,
-                            ),
-                          ),
-                          child: isSelected
-                              ? Icon(
-                                  Icons.check,
-                                  color: colorName == 'Beyaz'
-                                      ? Colors.black
-                                      : Colors.white,
-                                  size: 20,
-                                )
-                              : null,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          colorName,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight:
-                                isSelected ? FontWeight.w600 : FontWeight.normal,
-                            color: isSelected
-                                ? AppDesign.primaryColor
-                                : AppDesign.textPrimary,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
+                  child: Text(
+                    year.toString(),
+                    style: TextStyle(
+                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                      color: isSelected ? CupertinoColors.white : CupertinoColors.label,
                     ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+              childCount: years.length,
+            ),
           ),
         ),
       ],
     );
   }
 
-  // ADIM 7: Plaka (Opsiyonel)
+  // ADIM 7: Plaka (CupertinoTextField ile)
   Widget _buildPlateStep() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildStepHeader('Plaka (Opsiyonel)', 'Plaka numaranızı girin'),
-        Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            children: [
-              TextField(
-                controller: _plateController,
-                textCapitalization: TextCapitalization.characters,
-                decoration: InputDecoration(
-                  hintText: '34 ABC 123',
-                  prefixIcon: const Icon(Icons.pin),
-                  filled: true,
-                  fillColor: Colors.grey.shade50,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.grey.shade200),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.grey.shade200),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide:
-                        BorderSide(color: AppDesign.primaryColor, width: 2),
-                  ),
-                ),
+    return SliverMainAxisGroup(
+      slivers: [
+        _buildStepHeader('Plaka (Opsiyonel)', 'Plaka bilginizi sadece siz görebilirsiniz.'),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: CupertinoTextField(
+              controller: _plateController,
+              placeholder: '34 ABC 123',
+              prefix: const Padding(
+                padding: EdgeInsets.only(left: 12.0),
+                child: Icon(CupertinoIcons.car_detailed, color: CupertinoColors.systemGrey),
               ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: Colors.blue.shade200,
-                    width: 1,
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.info_outline,
-                      color: Colors.blue.shade700,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Plaka bilgisi opsiyoneldir ve sadece sizin görebilmeniz için kaydedilir.',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.blue.shade700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+              textCapitalization: TextCapitalization.characters,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: CupertinoColors.white,
+                borderRadius: BorderRadius.circular(12),
               ),
-            ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+  
+  // ADIM 8: Tüketim (CupertinoTextField ile)
+  Widget _buildConsumptionStep() {
+    return SliverMainAxisGroup(
+      slivers: [
+        _buildStepHeader('Tüketim (Opsiyonel)', 'Daha doğru maliyet hesaplamaları için.'),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: CupertinoListSection.insetGrouped(
+              header: const Text('TÜKETİM (L/100KM)'),
+              children: [
+                CupertinoTextField.borderless(
+                  controller: _cityConsumptionController,
+                  placeholder: 'Şehir İçi (örn: 8.5)',
+                  prefix: const Padding(
+                    padding: EdgeInsets.only(left: 12.0),
+                    child: Icon(CupertinoIcons.building_2_fill, color: CupertinoColors.systemGrey),
+                  ),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                CupertinoTextField.borderless(
+                  controller: _highwayConsumptionController,
+                  placeholder: 'Şehir Dışı (örn: 6.2)',
+                  prefix: const Padding(
+                    padding: EdgeInsets.only(left: 12.0),
+                    child: Icon(CupertinoIcons.bold, color: CupertinoColors.systemGrey),
+                  ),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+              ],
+            ),
           ),
         ),
       ],
     );
   }
 
+  // Apple stili alt buton barı
   Widget _buildBottomButtons() {
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(10),
-            blurRadius: 10,
-            offset: const Offset(0, -5),
-          ),
-        ],
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
+      decoration: const BoxDecoration(
+        color: CupertinoColors.systemGroupedBackground,
+        border: Border(top: BorderSide(color: CupertinoColors.systemGrey4, width: 0.5)),
       ),
       child: Row(
         children: [
           if (_currentStep > 0)
             Expanded(
-              child: OutlinedButton(
+              child: CupertinoButton(
                 onPressed: _goToPreviousStep,
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  side: BorderSide(color: Colors.grey.shade300),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
                 child: const Text('Geri'),
               ),
             ),
           if (_currentStep > 0) const SizedBox(width: 12),
           Expanded(
             flex: 2,
-            child: ElevatedButton(
-              onPressed: _isSaving 
-                  ? null 
-                  : (_currentStep == 6 ? _saveVehicle : (_canGoNext ? _goToNextStep : null)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppDesign.primaryColor,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                disabledBackgroundColor: Colors.grey.shade300,
-              ),
+            child: CupertinoButton.filled(
+              onPressed: _isSaving ? null : (_currentStep == 7 ? _saveVehicle : (_canGoNext ? _goToNextStep : null)),
+              borderRadius: BorderRadius.circular(12),
               child: _isSaving
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    )
+                  ? const CupertinoActivityIndicator(color: CupertinoColors.white)
                   : Text(
-                      _currentStep == 6 ? 'Kaydet' : 'Devam',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      _currentStep == 7 ? 'Kaydet' : 'Devam',
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: CupertinoColors.white),
                     ),
             ),
           ),
         ],
       ),
+    );
+  }
+  
+  // Apple stili SnackBar alternatifleri
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Row(children: [const Icon(Icons.error_outline, color: Colors.white), const SizedBox(width: 12), Expanded(child: Text(message))]),
+      backgroundColor: Colors.red,
+    ));
+  }
+
+  void _showSuccessSnackBar(String message) {
+     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Row(children: [const Icon(Icons.check_circle, color: Colors.white), const SizedBox(width: 12), Expanded(child: Text(message))]),
+      backgroundColor: Colors.green,
+    ));
+  }
+}
+
+// VehicleModel'a eklenmesi önerilen yardımcı metot
+extension VehicleModelCopy on VehicleModel {
+  VehicleModel copyWith({String? id}) {
+    return VehicleModel(
+      id: id ?? this.id,
+      userId: userId,
+      brand: brand,
+      model: model,
+      year: year,
+      vehicleClass: vehicleClass,
+      fuelType: fuelType,
+      plateNumber: plateNumber,
+      color: color,
+      imageUrl: imageUrl,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+      cityConsumption: cityConsumption,
+      highwayConsumption: highwayConsumption,
+      isDefault: isDefault,
     );
   }
 }

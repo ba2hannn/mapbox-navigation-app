@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_app/features/splash/presentation/pages/splash_screen.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -7,7 +8,7 @@ import 'core/config/app_config.dart';
 import 'core/theme/app_theme.dart';
 import 'core/di/injection_container.dart' as di;
 import 'features/map/presentation/bloc/map_bloc.dart';
-import 'features/splash/presentation/pages/splash_screen.dart';
+import 'features/vehicle/presentation/bloc/vehicle_bloc.dart';
 import 'features/auth/presentation/pages/login_screen.dart';
 import 'features/map/presentation/pages/map_screen.dart';
 
@@ -33,8 +34,11 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (context) => di.sl<MapBloc>(),
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider(create: (context) => di.sl<MapBloc>()),
+        BlocProvider(create: (context) => di.sl<VehicleBloc>()),
+      ],
       child: MaterialApp(
         title: AppConfig.appName,
         debugShowCheckedModeBanner: false,

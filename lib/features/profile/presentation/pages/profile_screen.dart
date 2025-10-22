@@ -3,6 +3,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/theme/app_design.dart';
 import '../../../vehicles/presentation/pages/vehicles_list_screen.dart';
 import '../../../auth/data/repositories/auth_repository.dart';
+import '../../../../core/services/analytics_service.dart';
+import '../../../../core/services/monthly_reset_manager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../../core/services/saved_places_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -17,11 +22,16 @@ class _ProfileScreenState extends State<ProfileScreen>
   late Animation<double> _animation;
   final _authService = AuthService();
   User? _currentUser;
+  late final AnalyticsService _analyticsService;
+  late final SavedPlacesService _savedPlacesService;
+  late MonthlyResetManager _monthlyResetManager;
+  bool _servicesInitialized = false;
 
   @override
   void initState() {
     super.initState();
     _currentUser = _authService.currentUser;
+    _initializeServices();
     _controller = AnimationController(
       vsync: this,
       duration: AppDesign.slowAnimation,
@@ -31,6 +41,31 @@ class _ProfileScreenState extends State<ProfileScreen>
       curve: Curves.easeOut,
     );
     _controller.forward();
+  }
+
+  Future<void> _initializeServices() async {
+    final prefs = await SharedPreferences.getInstance();
+    final firestore = FirebaseFirestore.instance;
+
+    _analyticsService = AnalyticsService(firestore, prefs);
+    _savedPlacesService = SavedPlacesService();
+    _monthlyResetManager = MonthlyResetManager(prefs);
+
+    await _analyticsService.initialize();
+    await _monthlyResetManager.checkAndResetIfNeeded();
+    
+    // Favori sayısını AnalyticsService'e güncelle
+    final savedPlaces = await _savedPlacesService.getSavedPlaces();
+    await _analyticsService.updateFavoriteCount(savedPlaces.length);
+    
+    if (mounted) {
+      setState(() {
+        _servicesInitialized = true;
+      });
+    }
+
+    // Favori sayısı için saved places service'ini dinle
+    // Bu kısım daha sonra entegre edilecek
   }
 
   @override
@@ -73,7 +108,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                   children: [
                     _buildProfileHeader(),
                     const SizedBox(height: 24),
-                    _buildStatsCards(),
+                    if (_servicesInitialized) 
+                      _buildStatsCards()
+                    else
+                      _buildStatsLoadingPlaceholder(),
                     const SizedBox(height: 24),
                     ..._buildMenuItems(),
                     const SizedBox(height: 32),
@@ -609,7 +647,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                   Expanded(
                     child: _buildStatCard(
                       label: 'Rota',
-                      value: '23',
+                      value: _servicesInitialized
+                        ? _analyticsService.currentStats.totalRouteSearches.toString()
+                        : '0',
                       icon: Icons.route,
                       color: const Color(0xFF3498DB),
                       index: 0,
@@ -619,7 +659,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                   Expanded(
                     child: _buildStatCard(
                       label: 'Km',
-                      value: '145',
+                      value: _servicesInitialized
+                        ? _analyticsService.currentStats.totalKm.toStringAsFixed(1)
+                        : '0.0',
                       icon: Icons.straighten,
                       color: const Color(0xFF2ECC71),
                       index: 1,
@@ -629,7 +671,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                   Expanded(
                     child: _buildStatCard(
                       label: 'Favori',
-                      value: '12',
+                      value: _servicesInitialized
+                        ? _analyticsService.currentStats.activeFavorites.toString()
+                        : '0',
                       icon: Icons.favorite,
                       color: const Color(0xFFFF6B6B),
                       index: 2,
@@ -640,6 +684,150 @@ class _ProfileScreenState extends State<ProfileScreen>
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildStatsLoadingPlaceholder() {
+    return FadeTransition(
+      opacity: _animation,
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, 0.3),
+          end: Offset.zero,
+        ).animate(
+          CurvedAnimation(
+            parent: _controller,
+            curve: const Interval(0.2, 0.5, curve: Curves.easeOut),
+          ),
+        ),
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 20),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: Colors.grey.shade200,
+              width: 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppDesign.primaryColor,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.analytics,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'İstatistiklerim',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppDesign.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildLoadingStatCard(
+                      label: 'Rota',
+                      icon: Icons.route,
+                      color: const Color(0xFF3498DB),
+                      index: 0,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildLoadingStatCard(
+                      label: 'Km',
+                      icon: Icons.straighten,
+                      color: const Color(0xFF2ECC71),
+                      index: 1,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildLoadingStatCard(
+                      label: 'Favori',
+                      icon: Icons.favorite,
+                      color: const Color(0xFFFF6B6B),
+                      index: 2,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoadingStatCard({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required int index,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withAlpha(15),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: color.withAlpha(50),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: color.withAlpha(25),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              icon,
+              color: color,
+              size: 24,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            width: 40,
+            height: 24,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              color: AppDesign.textSecondary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
       ),
     );
   }
