@@ -8,7 +8,7 @@ import '../../../../core/services/search_history_service.dart';
 import '../../../../core/services/directions_service.dart' as directions;
 import '../../../../core/services/analytics_service.dart';
 import '../../../../core/theme/app_design.dart';
-import '../../../../core/widgets/custom_notification.dart';
+import '../../../../core/widgets/animated_notification.dart';
 
 // ignore_for_file: use_build_context_synchronously
 
@@ -192,7 +192,7 @@ class _SearchAndRouteScreenState extends State<SearchAndRouteScreen> {
       
       if (routes.isEmpty) {
         if (mounted) {
-          CustomNotification.showError(context, message: 'Rota bulunamadı');
+          AnimatedNotification.showError(context, message: 'Rota bulunamadı');
         }
         return;
       }
@@ -212,7 +212,7 @@ class _SearchAndRouteScreenState extends State<SearchAndRouteScreen> {
       }
     } catch (e) {
       if (mounted) {
-        CustomNotification.showError(context, message: 'Rota hesaplanamadı: $e');
+        AnimatedNotification.showError(context, message: 'Rota hesaplanamadı: $e');
       }
     }
   }
@@ -220,7 +220,7 @@ class _SearchAndRouteScreenState extends State<SearchAndRouteScreen> {
   Future<void> _showSaveLocationDialog() async {
     // Kaydedilen lokasyon ekleme dialogu (basit)
     // İleride implement edilecek
-    CustomNotification.showInfo(context, message: 'Yakında eklenecek');
+    AnimatedNotification.showInfo(context, message: 'Yakında eklenecek');
   }
 
   @override
@@ -252,7 +252,7 @@ class _SearchAndRouteScreenState extends State<SearchAndRouteScreen> {
               _loadHistory();
               _loadSavedRoutes();
               if (mounted) {
-                CustomNotification.showInfo(context, message: 'Geçmiş temizlendi');
+                AnimatedNotification.showInfo(context, message: 'Geçmiş temizlendi');
               }
             },
           ),

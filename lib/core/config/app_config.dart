@@ -24,6 +24,6 @@ class AppConfig {
   static const int tileCacheSize = 50; // MB - Türkiye için tile cache
   
   // App Info
-  static const String appName = 'Rota App';
+  static const String appName = 'Rotonomi';
   static const String appVersion = '1.0.0';
 }

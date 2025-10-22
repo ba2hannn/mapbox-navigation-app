@@ -275,7 +275,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    _currentUser?.email ?? 'email@example.com',
+                    _currentUser?.email ?? 'E-posta adresi bulunamadı',
                     style: TextStyle(
                       fontSize: 14,
                       color: AppDesign.primaryColor,
@@ -931,6 +931,16 @@ class _ProfileScreenState extends State<ProfileScreen>
               context,
               MaterialPageRoute(
                 builder: (context) => const VehiclesListScreen(),
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('🚧 ${item['title']} özelliği yakında eklenecek'),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             );
           }

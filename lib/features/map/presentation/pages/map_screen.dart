@@ -16,7 +16,7 @@ import '../../../../core/widgets/map_controls.dart';
 import '../../../../core/widgets/map_layer_selector.dart';
 import '../../../../core/widgets/search_bar_widget.dart';
 import '../../../../core/widgets/user_avatar.dart';
-import '../../../../core/widgets/custom_notification.dart';
+import '../../../../core/widgets/animated_notification.dart';
 import '../../../../core/services/directions_service.dart' as directions;
 import '../../../../core/services/geocoding_service.dart';
 import '../../../../core/services/fuel_cost_service.dart';
@@ -134,7 +134,7 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
       body: BlocConsumer<MapBloc, MapState>(
         listener: (context, state) {
           if (state is MapError) {
-            CustomNotification.showError(context, message: state.message);
+            AnimatedNotification.showError(context, message: state.message);
           }
           if (state is MapLoaded && state.userLocation != null) {
             _userLocationPoint = Point(coordinates: Position(state.userLocation!.longitude, state.userLocation!.latitude));
@@ -407,14 +407,14 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
     try {
       if (_showTraffic) {
         await _addTrafficLayers();
-        if (mounted) CustomNotification.showSuccess(context, message: '🚦 Trafik yoğunluğu gösteriliyor');
+        if (mounted) AnimatedNotification.showSuccess(context, message: '🚦 Trafik yoğunluğu gösteriliyor');
       } else {
         await _removeTrafficLayers();
       }
     } catch (e) {
       debugPrint('❌ Trafik toggle hatası: $e');
       setState(() => _showTraffic = !_showTraffic);
-      if (mounted) CustomNotification.showError(context, message: 'Trafik bilgisi yüklenemedi');
+      if (mounted) AnimatedNotification.showError(context, message: 'Trafik bilgisi yüklenemedi');
     }
   }
 
@@ -816,7 +816,7 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
                 onTap: () async {
                   await _clearAllRoutes();
                   _resetRouteState();
-                  if (mounted) CustomNotification.showInfo(context, message: 'Rota temizlendi');
+                  if (mounted) AnimatedNotification.showInfo(context, message: 'Rota temizlendi');
                 },
                 child: Container(
                   padding: const EdgeInsets.all(4),
@@ -1108,7 +1108,7 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
 
                 if (mounted) {
                   Navigator.of(context).pop();
-                  CustomNotification.showSuccess(context, message: 'Yer kaydedildi');
+                  AnimatedNotification.showSuccess(context, message: 'Yer kaydedildi');
                 }
               },
               child: const Text('Kaydet'),
@@ -1545,7 +1545,7 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
 
                 if (mounted) {
                   Navigator.of(context).pop();
-                  CustomNotification.showSuccess(context, message: 'Yer güncellendi');
+                  AnimatedNotification.showSuccess(context, message: 'Yer güncellendi');
                 }
               },
               child: const Text('Güncelle'),
@@ -1581,7 +1581,7 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
       await _loadSavedPlaces();
 
       if (mounted) {
-        CustomNotification.showSuccess(context, message: 'Yer silindi');
+        AnimatedNotification.showSuccess(context, message: 'Yer silindi');
       }
     }
   }
@@ -1932,11 +1932,11 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
                       await _segmentRouteAndLaunchNavigation(selectedRoute);
 
                       if (mounted) {
-                        CustomNotification.showSuccess(context, message: 'Rota başlatıldı ve navigasyon açıldı');
+                        AnimatedNotification.showSuccess(context, message: 'Rota başlatıldı ve navigasyon açıldı');
                       }
                     } catch (e) {
                       if (mounted) {
-                        CustomNotification.showError(context, message: 'Rota başlatılırken hata: $e');
+                        AnimatedNotification.showError(context, message: 'Rota başlatılırken hata: $e');
                       }
                     }
                   },
@@ -2196,7 +2196,7 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
     } catch (e) {
       debugPrint('❌ Harita uzun basma hatası: $e');
       if (mounted) {
-        CustomNotification.showError(context, message: 'Konum tespit edilemedi');
+        AnimatedNotification.showError(context, message: 'Konum tespit edilemedi');
       }
     }
   }
@@ -2295,7 +2295,7 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
 
   Future<void> _showTripRecordingDialog() async {
     if (_currentTripId == null || _currentRoute == null) {
-      CustomNotification.showError(context, message: 'Aktif yolculuk bulunamadı');
+      AnimatedNotification.showError(context, message: 'Aktif yolculuk bulunamadı');
       return;
     }
 
@@ -2337,12 +2337,12 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
       await _launchNavigationWithWaypoints(route, segments);
 
       if (mounted) {
-        CustomNotification.showSuccess(context, message: 'Navigasyon başlatıldı');
+        AnimatedNotification.showSuccess(context, message: 'Navigasyon başlatıldı');
       }
     } catch (e) {
       debugPrint('❌ Rota segmentasyonu hatası: $e');
       if (mounted) {
-        CustomNotification.showError(context, message: 'Navigasyon başlatılamadı');
+        AnimatedNotification.showError(context, message: 'Navigasyon başlatılamadı');
       }
     }
   }
@@ -2558,7 +2558,7 @@ class _AddSavedPlacePanelState extends State<AddSavedPlacePanel> {
       } catch (e) {
         if (mounted) {
           setState(() => _isSearching = false);
-          CustomNotification.showError(context, message: 'Arama yapılırken hata oluştu');
+          AnimatedNotification.showError(context, message: 'Arama yapılırken hata oluştu');
         }
       }
     });

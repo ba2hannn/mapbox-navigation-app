@@ -1,4 +1,4 @@
-# 🚗 Rota App - Professional Mapbox Navigation Application
+# 🚗 Rotonomi - Akıllı Rota ve Seyahat Yönetim Uygulaması
 
 ## 📋 Proje Genel Bakış
 

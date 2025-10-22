@@ -1,6 +1,6 @@
-name: flutter_app
-description: "Professional Mapbox Navigation Application"
-publish_to: 'none'
+name: rotonomi
+description: "Akıllı Rota ve Seyahat Yönetim Uygulaması"
+# publish_to: 'none' # Yayın için kaldırıldı
 version: 1.0.0+1
 
 environment:

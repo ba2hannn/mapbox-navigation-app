@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/theme/app_design.dart';
 import '../../../../core/services/firebase_service.dart';
+import '../../../../core/widgets/animated_notification.dart';
 import '../../data/datasources/vehicle_data.dart';
 import '../../data/models/vehicle_model.dart';
 import '../../../vehicle/presentation/bloc/vehicle_bloc.dart';
@@ -274,7 +275,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
       debugPrint('✅ Araç başarıyla ${_isEditing ? 'güncellendi' : 'kaydedildi'}!');
       
       if (mounted) {
-        _showSuccessSnackBar(_isEditing ? 'Araç güncellendi!' : '${_selectedBrand!.name} ${_selectedModel!.name} eklendi!');
+        AnimatedNotification.showSuccess(context, message: _isEditing ? 'Araç güncellendi!' : '${_selectedBrand!.name} ${_selectedModel!.name} eklendi!');
         Navigator.pop(context, true);
       }
     } catch (e) {
@@ -528,21 +529,40 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
         _buildStepHeader('Araç Detayı', '${_selectedModel?.name ?? ""} için motor ve donanım seçin.'),
         SliverPadding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
-          sliver: CupertinoListSection.insetGrouped(
-            children: _vehicles.map((vehicle) {
-              final isSelected = _selectedVehicle?.id == vehicle.id;
-              return CupertinoListTile(
-                title: Text(vehicle.modificationEngine, style: TextStyle(color: isSelected ? AppDesign.primaryColor : CupertinoColors.label)),
-                subtitle: Text('${vehicle.fuelConsumption.combined}L/100km • ${vehicle.yearRef}'),
-                onTap: () {
-                  setState(() { _selectedVehicle = vehicle; });
-                  Future.delayed(const Duration(milliseconds: 200), _goToNextStep);
-                },
-                trailing: isSelected
-                    ? const Icon(CupertinoIcons.checkmark_circle_fill, color: AppDesign.primaryColor)
-                    : null,
-              );
-            }).toList(),
+          sliver: SliverToBoxAdapter(
+            child: Container(
+              decoration: BoxDecoration(
+                color: CupertinoColors.systemGroupedBackground,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: _vehicles.map((vehicle) {
+                  final isSelected = _selectedVehicle?.id == vehicle.id;
+                  return Container(
+                    decoration: BoxDecoration(
+                      color: CupertinoColors.systemBackground,
+                      border: Border(
+                        bottom: BorderSide(
+                          color: CupertinoColors.separator,
+                          width: 0.5,
+                        ),
+                      ),
+                    ),
+                    child: CupertinoListTile(
+                      title: Text(vehicle.modificationEngine, style: TextStyle(color: isSelected ? AppDesign.primaryColor : CupertinoColors.label)),
+                      subtitle: Text('${vehicle.fuelConsumption.combined}L/100km • ${vehicle.yearRef}'),
+                      onTap: () {
+                        setState(() { _selectedVehicle = vehicle; });
+                        Future.delayed(const Duration(milliseconds: 200), _goToNextStep);
+                      },
+                      trailing: isSelected
+                          ? const Icon(CupertinoIcons.checkmark_circle_fill, color: AppDesign.primaryColor)
+                          : null,
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
           ),
         )
       ],
@@ -556,22 +576,41 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
         _buildStepHeader('Araç Sınıfı', 'Geçiş ücreti hesaplamaları için gereklidir.'),
         SliverPadding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
-          sliver: CupertinoListSection.insetGrouped(
-            children: VehicleData.vehicleClasses.map((vehicleClass) {
-              final isSelected = _selectedVehicleClass == vehicleClass['id'];
-              return CupertinoListTile(
-                title: Text(vehicleClass['name']!, style: TextStyle(color: isSelected ? AppDesign.primaryColor : CupertinoColors.label)),
-                subtitle: Text(vehicleClass['description']!),
-                onTap: () {
-                  setState(() { _selectedVehicleClass = vehicleClass['id']; });
-                  Future.delayed(const Duration(milliseconds: 200), _goToNextStep);
-                },
-                leading: Text(vehicleClass['icon']!, style: const TextStyle(fontSize: 28)),
-                trailing: isSelected
-                    ? const Icon(CupertinoIcons.checkmark_circle_fill, color: AppDesign.primaryColor)
-                    : null,
-              );
-            }).toList(),
+          sliver: SliverToBoxAdapter(
+            child: Container(
+              decoration: BoxDecoration(
+                color: CupertinoColors.systemGroupedBackground,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: VehicleData.vehicleClasses.map((vehicleClass) {
+                  final isSelected = _selectedVehicleClass == vehicleClass['id'];
+                  return Container(
+                    decoration: BoxDecoration(
+                      color: CupertinoColors.systemBackground,
+                      border: Border(
+                        bottom: BorderSide(
+                          color: CupertinoColors.separator,
+                          width: 0.5,
+                        ),
+                      ),
+                    ),
+                    child: CupertinoListTile(
+                      title: Text(vehicleClass['name']!, style: TextStyle(color: isSelected ? AppDesign.primaryColor : CupertinoColors.label)),
+                      subtitle: Text(vehicleClass['description']!),
+                      onTap: () {
+                        setState(() { _selectedVehicleClass = vehicleClass['id']; });
+                        Future.delayed(const Duration(milliseconds: 200), _goToNextStep);
+                      },
+                      leading: Text(vehicleClass['icon']!, style: const TextStyle(fontSize: 28)),
+                      trailing: isSelected
+                          ? const Icon(CupertinoIcons.checkmark_circle_fill, color: AppDesign.primaryColor)
+                          : null,
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
           ),
         ),
       ],
@@ -717,30 +756,73 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: CupertinoListSection.insetGrouped(
-              header: const Text('TÜKETİM (L/100KM)'),
-              children: [
-                CupertinoTextField.borderless(
-                  controller: _cityConsumptionController,
-                  placeholder: 'Şehir İçi (örn: 8.5)',
-                  prefix: const Padding(
-                    padding: EdgeInsets.only(left: 12.0),
-                    child: Icon(CupertinoIcons.building_2_fill, color: CupertinoColors.systemGrey),
+            child: Container(
+              decoration: BoxDecoration(
+                color: CupertinoColors.systemGroupedBackground,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: CupertinoColors.secondarySystemGroupedBackground,
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(12),
+                        topRight: Radius.circular(12),
+                      ),
+                    ),
+                    child: const Text(
+                      'TÜKETİM (L/100KM)',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: CupertinoColors.secondaryLabel,
+                      ),
+                    ),
                   ),
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                CupertinoTextField.borderless(
-                  controller: _highwayConsumptionController,
-                  placeholder: 'Şehir Dışı (örn: 6.2)',
-                  prefix: const Padding(
-                    padding: EdgeInsets.only(left: 12.0),
-                    child: Icon(CupertinoIcons.bold, color: CupertinoColors.systemGrey),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: CupertinoColors.systemBackground,
+                      border: Border(
+                        bottom: BorderSide(
+                          color: CupertinoColors.separator,
+                          width: 0.5,
+                        ),
+                      ),
+                    ),
+                    child: CupertinoTextField.borderless(
+                      controller: _cityConsumptionController,
+                      placeholder: 'Şehir İçi (örn: 8.5)',
+                      prefix: const Padding(
+                        padding: EdgeInsets.only(left: 12.0),
+                        child: Icon(CupertinoIcons.building_2_fill, color: CupertinoColors.systemGrey),
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
                   ),
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-              ],
+                  Container(
+                    decoration: BoxDecoration(
+                      color: CupertinoColors.systemBackground,
+                      borderRadius: const BorderRadius.only(
+                        bottomLeft: Radius.circular(12),
+                        bottomRight: Radius.circular(12),
+                      ),
+                    ),
+                    child: CupertinoTextField.borderless(
+                      controller: _highwayConsumptionController,
+                      placeholder: 'Şehir Dışı (örn: 6.2)',
+                      prefix: const Padding(
+                        padding: EdgeInsets.only(left: 12.0),
+                        child: Icon(CupertinoIcons.bold, color: CupertinoColors.systemGrey),
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -789,13 +871,6 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Row(children: [const Icon(Icons.error_outline, color: Colors.white), const SizedBox(width: 12), Expanded(child: Text(message))]),
       backgroundColor: Colors.red,
-    ));
-  }
-
-  void _showSuccessSnackBar(String message) {
-     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Row(children: [const Icon(Icons.check_circle, color: Colors.white), const SizedBox(width: 12), Expanded(child: Text(message))]),
-      backgroundColor: Colors.green,
     ));
   }
 }

@@ -65,7 +65,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '789324675837',
     projectId: 'rota-app-2024',
     storageBucket: 'rota-app-2024.firebasestorage.app',
-    iosBundleId: 'com.example.flutterApp',
+    iosBundleId: 'com.rotonomi.app',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
@@ -74,7 +74,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '789324675837',
     projectId: 'rota-app-2024',
     storageBucket: 'rota-app-2024.firebasestorage.app',
-    iosBundleId: 'com.example.flutterApp',
+    iosBundleId: 'com.rotonomi.app',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(

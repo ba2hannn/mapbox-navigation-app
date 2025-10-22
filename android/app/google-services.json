@@ -28,7 +28,7 @@
       "client_info": {
         "mobilesdk_app_id": "1:789324675837:android:9f9846ac8db4536dcc1c94",
         "android_client_info": {
-          "package_name": "com.example.rotaapp"
+          "package_name": "com.rotonomi.app"
         }
       },
       "oauth_client": [],
