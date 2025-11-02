@@ -9,6 +9,8 @@ import '../../../../core/services/monthly_reset_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../core/services/saved_places_service.dart';
+import '../../../legal/presentation/pages/privacy_policy_screen.dart';
+import '../../../legal/presentation/pages/terms_of_service_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -916,6 +918,18 @@ class _ProfileScreenState extends State<ProfileScreen>
         'color': const Color(0xFFF39C12),
         'index': 4,
       },
+      {
+        'title': 'Gizlilik Politikası',
+        'icon': Icons.privacy_tip_outlined,
+        'color': const Color(0xFF9B59B6),
+        'index': 5,
+      },
+      {
+        'title': 'Kullanım Koşulları',
+        'icon': Icons.description_outlined,
+        'color': const Color(0xFF1ABC9C),
+        'index': 6,
+      },
     ];
 
     final menuWidgets = items.map((item) {
@@ -928,6 +942,20 @@ class _ProfileScreenState extends State<ProfileScreen>
               context,
               MaterialPageRoute(
                 builder: (context) => const VehiclesListScreen(),
+              ),
+            );
+          } else if (item['title'] == 'Gizlilik Politikası') {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const PrivacyPolicyScreen(),
+              ),
+            );
+          } else if (item['title'] == 'Kullanım Koşulları') {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const TermsOfServiceScreen(),
               ),
             );
           } else {

@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import '../../../../core/theme/app_design.dart';
 import '../../../../core/widgets/animated_notification.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../../map/presentation/pages/map_screen.dart';
+import '../../../legal/presentation/pages/privacy_policy_screen.dart';
+import '../../../legal/presentation/pages/terms_of_service_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -332,7 +335,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               style: TextStyle(
                                 color: AppDesign.primaryColor,
                                 fontWeight: FontWeight.w600,
+                                decoration: TextDecoration.underline,
                               ),
+                              recognizer: TapGestureRecognizer()
+                                ..onTap = () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => const TermsOfServiceScreen(),
+                                    ),
+                                  );
+                                },
                             ),
                             const TextSpan(text: ' ve '),
                             TextSpan(
@@ -340,7 +353,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               style: TextStyle(
                                 color: AppDesign.primaryColor,
                                 fontWeight: FontWeight.w600,
+                                decoration: TextDecoration.underline,
                               ),
+                              recognizer: TapGestureRecognizer()
+                                ..onTap = () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => const PrivacyPolicyScreen(),
+                                    ),
+                                  );
+                                },
                             ),
                             const TextSpan(text: '\'nı kabul ediyorum'),
                           ],
