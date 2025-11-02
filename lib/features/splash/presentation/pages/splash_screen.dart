@@ -97,6 +97,35 @@ class _SplashScreenState extends State<SplashScreen> {
             fit: BoxFit.cover,
           ),
         ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Image.asset(
+                'logo.png',
+                width: 150,
+                height: 150,
+                fit: BoxFit.contain,
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Rotonomi',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  shadows: [
+                    Shadow(
+                      blurRadius: 10.0,
+                      color: Colors.black,
+                      offset: Offset(2.0, 2.0),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
