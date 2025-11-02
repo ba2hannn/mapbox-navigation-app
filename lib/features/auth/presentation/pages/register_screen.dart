@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_design.dart';
+import '../../../../core/widgets/animated_notification.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../../map/presentation/pages/map_screen.dart';
 
@@ -36,15 +37,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     if (!_acceptTerms) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Lütfen kullanım koşullarını kabul edin'),
-          backgroundColor: Colors.orange,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
+      NotificationHelper.show(
+        context,
+        'Lütfen kullanım koşullarını kabul edin',
+        isError: true,
       );
       return;
     }
@@ -65,15 +61,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString()),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
+        NotificationHelper.show(
+          context,
+          e.toString(),
+          isError: true,
         );
       }
     } finally {

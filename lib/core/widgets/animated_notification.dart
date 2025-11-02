@@ -1,345 +1,281 @@
+// lib/core/widgets/animated_notification.dart
 import 'package:flutter/material.dart';
 import '../theme/app_design.dart';
 
-/// Özel animasyonlu bildirim sistemi - Top gibi düşen ve genişleyen bildirim
-class AnimatedNotification {
-  static OverlayEntry? _currentOverlay;
-
-  /// Başarı bildirimi göster
-  static void showSuccess(
-    BuildContext context, {
-    required String message,
-    Duration duration = const Duration(seconds: 3),
-  }) {
-    _show(
-      context,
-      message: message,
-      icon: Icons.check_circle,
-      backgroundColor: const Color(0xFF4CAF50),
-      duration: duration,
-    );
-  }
-
-  /// Hata bildirimi göster
-  static void showError(
-    BuildContext context, {
-    required String message,
-    Duration duration = const Duration(seconds: 3),
-  }) {
-    _show(
-      context,
-      message: message,
-      icon: Icons.error,
-      backgroundColor: const Color(0xFFF44336),
-      duration: duration,
-    );
-  }
-
-  /// Bilgi bildirimi göster
-  static void showInfo(
-    BuildContext context, {
-    required String message,
-    Duration duration = const Duration(seconds: 3),
-  }) {
-    _show(
-      context,
-      message: message,
-      icon: Icons.info,
-      backgroundColor: AppDesign.primaryColor,
-      duration: duration,
-    );
-  }
-
-  /// Uyarı bildirimi göster
-  static void showWarning(
-    BuildContext context, {
-    required String message,
-    Duration duration = const Duration(seconds: 3),
-  }) {
-    _show(
-      context,
-      message: message,
-      icon: Icons.warning,
-      backgroundColor: const Color(0xFFFF9800),
-      duration: duration,
-    );
-  }
-
-  /// Özel bildirim göster
-  static void _show(
-    BuildContext context, {
-    required String message,
-    required IconData icon,
-    required Color backgroundColor,
-    Duration duration = const Duration(seconds: 3),
-  }) {
-    // Önceki bildirimi kaldır
-    _currentOverlay?.remove();
-    _currentOverlay = null;
-
-    final overlay = Overlay.of(context);
-    final animationController = AnimationController(
-      vsync: overlay,
-      duration: const Duration(milliseconds: 800),
-    );
-
-    // Animasyonlar
-    final dropAnimation = Tween<double>(
-      begin: -50.0,
-      end: 0.0,
-    ).animate(CurvedAnimation(
-      parent: animationController,
-      curve: const Interval(0.0, 0.3, curve: Curves.bounceOut),
-    ));
-
-    final scaleAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: animationController,
-      curve: const Interval(0.1, 0.4, curve: Curves.elasticOut),
-    ));
-
-    final widthAnimation = Tween<double>(
-      begin: 60.0,
-      end: MediaQuery.of(context).size.width - 32,
-    ).animate(CurvedAnimation(
-      parent: animationController,
-      curve: const Interval(0.2, 0.5, curve: Curves.easeOutCubic),
-    ));
-
-    final contentFadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: animationController,
-      curve: const Interval(0.4, 0.6, curve: Curves.easeOut),
-    ));
-
-    _currentOverlay = OverlayEntry(
-      builder: (context) => _AnimatedNotificationWidget(
-        message: message,
-        icon: icon,
-        backgroundColor: backgroundColor,
-        dropAnimation: dropAnimation,
-        scaleAnimation: scaleAnimation,
-        widthAnimation: widthAnimation,
-        contentFadeAnimation: contentFadeAnimation,
-        onDismiss: () {
-          animationController.dispose();
-          _currentOverlay?.remove();
-          _currentOverlay = null;
-        },
-      ),
-    );
-
-    overlay.insert(_currentOverlay!);
-    animationController.forward();
-
-    // Otomatik kapanma
-    Future.delayed(duration, () async {
-      if (_currentOverlay != null) {
-        await _startDismissAnimation(animationController);
-      }
-    });
-  }
-
-  /// Kapanma animasyonu başlat
-  static Future<void> _startDismissAnimation(AnimationController controller) async {
-    // Basit fade out ve yukarı çıkma animasyonu
-    await controller.reverse();
-    controller.dispose();
-    _currentOverlay?.remove();
-    _currentOverlay = null;
-  }
-
-  /// Tüm bildirimleri temizle
-  static void dismissAll() {
-    _currentOverlay?.remove();
-    _currentOverlay = null;
-  }
-}
-
-class _AnimatedNotificationWidget extends StatefulWidget {
+class AnimatedNotification extends StatefulWidget {
   final String message;
-  final IconData icon;
-  final Color backgroundColor;
-  final Animation<double> dropAnimation;
-  final Animation<double> scaleAnimation;
-  final Animation<double> widthAnimation;
-  final Animation<double> contentFadeAnimation;
+  final bool isError;
   final VoidCallback onDismiss;
 
-  const _AnimatedNotificationWidget({
+  const AnimatedNotification({
+    super.key,
     required this.message,
-    required this.icon,
-    required this.backgroundColor,
-    required this.dropAnimation,
-    required this.scaleAnimation,
-    required this.widthAnimation,
-    required this.contentFadeAnimation,
+    this.isError = false,
     required this.onDismiss,
   });
 
   @override
-  State<_AnimatedNotificationWidget> createState() => _AnimatedNotificationWidgetState();
+  State<AnimatedNotification> createState() => _AnimatedNotificationState();
 }
 
-class _AnimatedNotificationWidgetState extends State<_AnimatedNotificationWidget>
+class _AnimatedNotificationState extends State<AnimatedNotification>
     with TickerProviderStateMixin {
+  late AnimationController _slideController;
+  late AnimationController _expandController;
 
-  late AnimationController _bounceController;
-  late Animation<double> _bounceAnimation;
+  late Animation<double> _slideAnimation;
+  late Animation<double> _expandAnimation;
 
   @override
   void initState() {
     super.initState();
-    _bounceController = AnimationController(
-      vsync: this,
+
+    _slideController = AnimationController(
       duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+    _slideAnimation = CurvedAnimation(
+      parent: _slideController,
+      curve: Curves.elasticOut,
     );
 
-    _bounceAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _bounceController,
-      curve: Curves.elasticOut,
-    ));
+    _expandController = AnimationController(
+      duration: const Duration(milliseconds: 700),
+      vsync: this,
+    );
+    _expandAnimation = CurvedAnimation(
+      parent: _expandController,
+      curve: Curves.easeInOutCubic,
+    );
 
-    // Drop animasyonu bittiğinde bounce başlat
-    widget.dropAnimation.addStatusListener((status) {
-      if (status == AnimationStatus.completed) {
-        _bounceController.forward();
+    _startAnimationSequence();
+  }
+
+  void _startAnimationSequence() async {
+    try {
+      if (!mounted) return;
+      await _slideController.forward();
+      
+      if (!mounted) return;
+      await Future.delayed(const Duration(milliseconds: 100));
+      
+      if (!mounted) return;
+      await _expandController.forward();
+      
+      if (!mounted) return;
+      await Future.delayed(const Duration(milliseconds: 2500));
+      
+      if (!mounted) return;
+      await _expandController.reverse();
+      
+      if (!mounted) return;
+      await Future.delayed(const Duration(milliseconds: 100));
+      
+      if (!mounted) return;
+      await _slideController.reverse();
+      
+      if (mounted) {
+        widget.onDismiss();
       }
-    });
+    } catch (e) {
+      debugPrint('Bildirim animasyon hatası: $e');
+      if (mounted) {
+        widget.onDismiss();
+      }
+    }
   }
 
   @override
   void dispose() {
-    _bounceController.dispose();
+    try {
+      _slideController.stop(canceled: true);
+      _slideController.dispose();
+    } catch (e) {
+      debugPrint('Slide controller dispose hatası: $e');
+    }
+    
+    try {
+      _expandController.stop(canceled: true);
+      _expandController.dispose();
+    } catch (e) {
+      debugPrint('Expand controller dispose hatası: $e');
+    }
+    
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Positioned(
-      top: 20 + widget.dropAnimation.value,
-      left: 16,
-      right: 16,
-      child: AnimatedBuilder(
-        animation: Listenable.merge([
-          widget.scaleAnimation,
-          widget.widthAnimation,
-          widget.contentFadeAnimation,
-          _bounceAnimation,
-        ]),
-        builder: (context, child) {
-          return Transform.scale(
-            scale: widget.scaleAnimation.value,
-            child: Container(
-              width: widget.widthAnimation.value,
-              height: 70,
-              decoration: BoxDecoration(
-                color: widget.backgroundColor,
-                borderRadius: BorderRadius.circular(35),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.4),
-                    blurRadius: 25,
-                    offset: const Offset(0, 12),
-                    spreadRadius: 0,
+    return AnimatedBuilder(
+      animation: Listenable.merge([_slideAnimation, _expandAnimation]),
+      builder: (context, child) {
+        final textPainter = TextPainter(
+          text: TextSpan(
+            text: widget.message,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+              letterSpacing: 0.3,
+            ),
+          ),
+          maxLines: 1,
+          textDirection: TextDirection.ltr,
+        )..layout(maxWidth: MediaQuery.of(context).size.width - 120);
+        
+        final screenWidth = MediaQuery.of(context).size.width;
+        final maxWidth = screenWidth - 32;
+        final messageWidth = (textPainter.width + 90).clamp(60.0, maxWidth);
+        final currentWidth = 60.0 + ((messageWidth - 60.0) * _expandAnimation.value);
+
+        const minHeight = 60.0;
+        const maxHeight = 64.0;
+        final currentHeight = minHeight + ((maxHeight - minHeight) * _expandAnimation.value);
+
+        final borderRadius = (currentHeight / 2) - (2.0 * _expandAnimation.value);
+
+        final topPosition = MediaQuery.of(context).padding.top + 16;
+        final yOffset = -80 + (80 * _slideAnimation.value);
+
+        return Positioned(
+          top: topPosition + yOffset,
+          left: (screenWidth - currentWidth) / 2,
+          child: GestureDetector(
+            onVerticalDragUpdate: (details) {
+              if (details.delta.dy < -5) {
+                if (mounted && _expandController.isAnimating == false && _slideController.isAnimating == false) {
+                  _expandController.reverse().catchError((e) => null);
+                  _slideController.reverse().catchError((e) => null);
+                  Future.delayed(const Duration(milliseconds: 300), () {
+                    if (mounted) {
+                      widget.onDismiss();
+                    }
+                  });
+                }
+              }
+            },
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                width: currentWidth,
+                height: currentHeight,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: widget.isError
+                        ? [
+                            const Color(0xFFEF5350),
+                            const Color(0xFFE53935),
+                          ]
+                        : [
+                            AppDesign.primaryColor,
+                            AppDesign.primaryColor.withOpacity(0.85),
+                          ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                  BoxShadow(
-                    color: widget.backgroundColor.withValues(alpha: 0.5),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8),
-                    spreadRadius: 0,
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(35),
-                child: BackdropFilter(
-                  filter: ColorFilter.mode(
-                    Colors.black.withValues(alpha: 0.1),
-                    BlendMode.srcOver,
-                  ),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        // İkon
-                        FadeTransition(
-                          opacity: widget.contentFadeAnimation,
-                          child: Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.25),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              widget.icon,
-                              color: Colors.white,
-                              size: 24,
-                            ),
-                          ),
+                  borderRadius: BorderRadius.circular(borderRadius),
+                  boxShadow: [
+                    BoxShadow(
+                      color: (widget.isError 
+                          ? const Color(0xFFE53935) 
+                          : AppDesign.primaryColor).withOpacity(0.4),
+                      blurRadius: 20,
+                      spreadRadius: 0,
+                      offset: const Offset(0, 8),
+                    ),
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.15),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Stack(
+                  children: [
+                    // İkon - Dikey ortalanmış
+                    Positioned(
+                      left: (currentHeight - 36) / 2,
+                      top: (currentHeight - 36) / 2,
+                      child: Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.25),
+                          shape: BoxShape.circle,
                         ),
-
-                        const SizedBox(width: 16),
-
-                        // Mesaj
-                        Expanded(
-                          child: FadeTransition(
-                            opacity: widget.contentFadeAnimation,
-                            child: Text(
-                              widget.message,
+                        child: Icon(
+                          widget.isError
+                              ? Icons.error_outline_rounded
+                              : Icons.check_circle_outline_rounded,
+                          color: Colors.white,
+                          size: 22,
+                        ),
+                      ),
+                    ),
+                    
+                    // Mesaj - Yavaşça görünüyor
+                    if (_expandAnimation.value > 0.2)
+                      Positioned.fill(
+                        left: currentHeight + 4,
+                        right: 16,
+                        child: Opacity(
+                          opacity: (((_expandAnimation.value - 0.2) / 0.8).clamp(0.0, 1.0)),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: DefaultTextStyle(
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 15,
                                 fontWeight: FontWeight.w600,
                                 letterSpacing: 0.2,
+                                height: 1.3,
+                                decoration: TextDecoration.none,
                               ),
-                              textAlign: TextAlign.center,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(width: 8),
-
-                        // Kapat butonu
-                        FadeTransition(
-                          opacity: widget.contentFadeAnimation,
-                          child: GestureDetector(
-                            onTap: widget.onDismiss,
-                            child: Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.2),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.close,
-                                color: Colors.white,
-                                size: 18,
+                              child: Text(
+                                widget.message,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.left,
                               ),
                             ),
                           ),
                         ),
-                      ],
-                    ),
-                  ),
+                      ),
+                  ],
                 ),
               ),
             ),
-          );
+          ),
+        );
+      },
+    );
+  }
+}
+
+class NotificationHelper {
+  static OverlayEntry? _currentEntry;
+
+  static void show(
+    BuildContext context,
+    String message, {
+    bool isError = false,
+  }) {
+    _currentEntry?.remove();
+    _currentEntry = null;
+
+    final overlay = Overlay.of(context);
+    final entry = OverlayEntry(
+      builder: (context) => AnimatedNotification(
+        message: message,
+        isError: isError,
+        onDismiss: () {
+          _currentEntry?.remove();
+          _currentEntry = null;
         },
       ),
     );
+
+    _currentEntry = entry;
+    overlay.insert(entry);
   }
 }

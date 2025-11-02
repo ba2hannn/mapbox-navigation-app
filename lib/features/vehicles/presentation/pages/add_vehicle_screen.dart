@@ -1,6 +1,7 @@
 import 'dart:convert';
-import 'package:flutter/cupertino.dart'; // Material'dan Cupertino'ya geçildi
-import 'package:flutter/material.dart' show ScaffoldMessenger, SnackBar, Icons, LinearProgressIndicator, Colors; // Sadece gerekli olanlar bırakıldı
+import 'dart:ui';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/theme/app_design.dart';
@@ -275,7 +276,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
       debugPrint('✅ Araç başarıyla ${_isEditing ? 'güncellendi' : 'kaydedildi'}!');
       
       if (mounted) {
-        AnimatedNotification.showSuccess(context, message: _isEditing ? 'Araç güncellendi!' : '${_selectedBrand!.name} ${_selectedModel!.name} eklendi!');
+        NotificationHelper.show(context, _isEditing ? 'Araç güncellendi!' : '${_selectedBrand!.name} ${_selectedModel!.name} eklendi!');
         Navigator.pop(context, true);
       }
     } catch (e) {
@@ -317,42 +318,84 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   }
   // --- SON: KAYDETME MANTIĞI ---
 
-  // --- YENİLENEN WIDGET'LAR ---
+  // --- APPLE-LIKE MODERN WIDGET'LAR ---
   @override
   Widget build(BuildContext context) {
     return BlocListener<VehicleBloc, VehicleState>(
       listener: _onBlocStateChanged,
-      child: CupertinoPageScaffold(
-        backgroundColor: CupertinoColors.systemGroupedBackground,
-        navigationBar: CupertinoNavigationBar(
-          middle: Text(_isEditing ? 'Araç Düzenle' : 'Araç Ekle'),
-          previousPageTitle: 'Geri',
-          // Kapatma butonu yerine iOS standardı olan 'Vazgeç' metni
-          leading: CupertinoButton(
-            padding: EdgeInsets.zero,
-            child: const Text('Vazgeç'),
-            onPressed: () => Navigator.pop(context),
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF5F5F7),
+        extendBodyBehindAppBar: true,
+        appBar: PreferredSize(
+          preferredSize: const Size.fromHeight(100),
+          child: ClipRRect(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: AppBar(
+                backgroundColor: Colors.white.withOpacity(0.8),
+                elevation: 0,
+                leading: Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: IconButton(
+                    icon: const Icon(Icons.arrow_back_ios_rounded, size: 20),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ),
+                title: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _isEditing ? 'Araç Düzenle' : 'Araç Ekle',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Adım ${_currentStep + 1} / 8',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade600,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+                bottom: PreferredSize(
+                  preferredSize: const Size.fromHeight(3),
+                  child: Container(
+                    height: 3,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          AppDesign.primaryColor,
+                          AppDesign.primaryColor.withOpacity(0.5),
+                        ],
+                        stops: [(_currentStep + 1) / 8, (_currentStep + 1) / 8],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
-        child: Column(
+        body: Column(
           children: [
-            // AppBar altına entegre edilmiş progress bar
-            LinearProgressIndicator(
-              value: (_currentStep + 1) / 8,
-              backgroundColor: CupertinoColors.systemGrey5,
-              valueColor: const AlwaysStoppedAnimation<Color>(AppDesign.primaryColor),
-              minHeight: 2,
-            ),
             Expanded(
               child: CustomScrollView(
                 slivers: [
+                  const SliverToBoxAdapter(child: SizedBox(height: 110)),
                   _buildCurrentStep(),
+                  const SliverToBoxAdapter(child: SizedBox(height: 100)),
                 ],
               ),
             ),
-            _buildBottomButtons(),
           ],
         ),
+        bottomNavigationBar: _buildModernBottomBar(),
       ),
     );
   }
@@ -371,36 +414,56 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
     }
   }
 
-  // Apple stili başlık
-  Widget _buildStepHeader(String title, String subtitle) {
+  // Modern Apple-like başlık
+  Widget _buildStepHeader(String title, String subtitle, {IconData? icon}) {
     return SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'ADIM ${_currentStep + 1}/8',
-              style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                color: AppDesign.primaryColor,
-                fontWeight: FontWeight.w600,
-                fontSize: 12,
+            if (icon != null)
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      AppDesign.primaryColor.withOpacity(0.15),
+                      AppDesign.primaryColor.withOpacity(0.05),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppDesign.primaryColor.withOpacity(0.1),
+                      blurRadius: 20,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Icon(icon, size: 32, color: AppDesign.primaryColor),
               ),
-            ),
-            const SizedBox(height: 4),
+            SizedBox(height: icon != null ? 20 : 0),
             Text(
               title,
-              style: CupertinoTheme.of(context).textTheme.navLargeTitleTextStyle.copyWith(
-                color: CupertinoColors.label,
-                fontSize: 28,
+              style: const TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -1,
+                height: 1.1,
               ),
             ),
             if (subtitle.isNotEmpty) ...[
-              const SizedBox(height: 6),
+              const SizedBox(height: 8),
               Text(
                 subtitle,
-                style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                  color: CupertinoColors.secondaryLabel,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey.shade600,
+                  height: 1.4,
+                  fontWeight: FontWeight.w400,
                 ),
               ),
             ],
@@ -410,54 +473,144 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
     );
   }
   
-  // ADIM 1: Marka Seçimi (CupertinoListSection ile)
+  // ADIM 1: Marka Seçimi - Modern Glass Cards
   Widget _buildBrandStep() {
     if (_isLoadingBrands) {
-      return const SliverFillRemaining(child: Center(child: CupertinoActivityIndicator()));
+      return SliverFillRemaining(
+        child: Center(
+          child: CircularProgressIndicator(color: AppDesign.primaryColor),
+        ),
+      );
     }
     return SliverMainAxisGroup(
       slivers: [
-        _buildStepHeader('Marka Seçin', 'Aracınızın markasını listeden bulun.'),
+        _buildStepHeader('Marka Seçin', 'Aracınızın markasını listeden bulun.', icon: Icons.business_rounded),
         SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
+          padding: const EdgeInsets.symmetric(horizontal: 24),
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate(
               (context, index) {
                 final brand = _brands[index];
                 final isSelected = _selectedBrand?.id == brand.id;
-                return CupertinoListTile(
-                  title: Text(brand.name, style: TextStyle(color: isSelected ? AppDesign.primaryColor : CupertinoColors.label)),
-                  onTap: () {
-                    setState(() {
-                      _selectedBrand = brand;
-                      _selectedModel = null;
-                      _selectedVehicle = null;
-                      _models = [];
-                      _vehicles = [];
-                    });
-                    Future.delayed(const Duration(milliseconds: 200), _goToNextStep);
+                
+                return TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0.0, end: 1.0),
+                  duration: Duration(milliseconds: 300 + (index * 50)),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, value, child) {
+                    return Transform.translate(
+                      offset: Offset(20 * (1 - value), 0),
+                      child: Opacity(opacity: value, child: child),
+                    );
                   },
-                  leading: Container(
-                    width: 36,
-                    height: 36,
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 12),
                     decoration: BoxDecoration(
-                      color: isSelected ? AppDesign.primaryColor : CupertinoColors.systemGrey4,
-                      borderRadius: BorderRadius.circular(8),
+                      color: isSelected 
+                          ? AppDesign.primaryColor.withOpacity(0.1)
+                          : Colors.white.withOpacity(0.7),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: isSelected 
+                            ? AppDesign.primaryColor.withOpacity(0.5)
+                            : Colors.grey.shade200,
+                        width: 2,
+                      ),
+                      boxShadow: isSelected ? [
+                        BoxShadow(
+                          color: AppDesign.primaryColor.withOpacity(0.2),
+                          blurRadius: 15,
+                          offset: const Offset(0, 4),
+                        ),
+                      ] : [],
                     ),
-                    child: Center(
-                      child: Text(
-                        brand.name[0],
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: isSelected ? CupertinoColors.white : CupertinoColors.secondaryLabel,
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () {
+                          setState(() {
+                            _selectedBrand = brand;
+                            _selectedModel = null;
+                            _selectedVehicle = null;
+                            _models = [];
+                            _vehicles = [];
+                          });
+                          Future.delayed(const Duration(milliseconds: 300), _goToNextStep);
+                        },
+                        borderRadius: BorderRadius.circular(20),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 48,
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: isSelected
+                                        ? [AppDesign.primaryColor, AppDesign.primaryColor.withOpacity(0.7)]
+                                        : [Colors.grey.shade200, Colors.grey.shade300],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                  borderRadius: BorderRadius.circular(14),
+                                  boxShadow: isSelected ? [
+                                    BoxShadow(
+                                      color: AppDesign.primaryColor.withOpacity(0.3),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ] : [],
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    brand.name[0].toUpperCase(),
+                                    style: TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w700,
+                                      color: isSelected ? Colors.white : Colors.grey.shade600,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Text(
+                                  brand.name,
+                                  style: TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w600,
+                                    color: isSelected ? AppDesign.primaryColor : Colors.black87,
+                                    letterSpacing: -0.3,
+                                  ),
+                                ),
+                              ),
+                              if (isSelected)
+                                Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    color: AppDesign.primaryColor,
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: AppDesign.primaryColor.withOpacity(0.4),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Icon(
+                                    Icons.check_rounded,
+                                    color: Colors.white,
+                                    size: 18,
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
-                  trailing: isSelected
-                      ? const Icon(CupertinoIcons.checkmark_circle_fill, color: AppDesign.primaryColor)
-                      : null,
                 );
               },
               childCount: _brands.length,
@@ -468,148 +621,104 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
     );
   }
 
-  // ADIM 2: Model Seçimi (Grid ve CupertinoButton ile)
+  // ADIM 2: Model Seçimi - Modern Glass Grid
   Widget _buildModelStep() {
-     if (_isLoadingModels) {
-      return const SliverFillRemaining(child: Center(child: CupertinoActivityIndicator()));
+    if (_isLoadingModels) {
+      return SliverFillRemaining(
+        child: Center(
+          child: CircularProgressIndicator(color: AppDesign.primaryColor),
+        ),
+      );
     }
     return SliverMainAxisGroup(
       slivers: [
-        _buildStepHeader('Model Seçin', '${_selectedBrand?.name ?? ""} için bir model belirleyin.'),
-         SliverPadding(
-           padding: const EdgeInsets.symmetric(horizontal: 20),
-           sliver: SliverGrid(
+        _buildStepHeader('Model Seçin', '${_selectedBrand?.name ?? ""} için bir model belirleyin.', icon: Icons.directions_car_rounded),
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          sliver: SliverGrid(
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-              childAspectRatio: 2.8,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 2.5,
             ),
             delegate: SliverChildBuilderDelegate(
               (context, index) {
                 final model = _models[index];
                 final isSelected = _selectedModel?.id == model.id;
-                return CupertinoButton(
-                  onPressed: () {
-                    setState(() {
-                      _selectedModel = model;
-                      _selectedVehicle = null;
-                      _vehicles = [];
-                    });
-                    Future.delayed(const Duration(milliseconds: 200), _goToNextStep);
+                
+                return TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0.0, end: 1.0),
+                  duration: Duration(milliseconds: 300 + (index * 30)),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, value, child) {
+                    return Transform.scale(
+                      scale: 0.8 + (0.2 * value),
+                      child: Opacity(opacity: value, child: child),
+                    );
                   },
-                  color: isSelected ? AppDesign.primaryColor : CupertinoColors.white,
-                  padding: const EdgeInsets.all(8),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Text(
-                    model.name,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                      color: isSelected ? CupertinoColors.white : CupertinoColors.label,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () {
+                        setState(() {
+                          _selectedModel = model;
+                          _selectedVehicle = null;
+                          _vehicles = [];
+                        });
+                        Future.delayed(const Duration(milliseconds: 300), _goToNextStep);
+                      },
+                      borderRadius: BorderRadius.circular(16),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: isSelected
+                              ? LinearGradient(
+                                  colors: [
+                                    AppDesign.primaryColor,
+                                    AppDesign.primaryColor.withOpacity(0.8),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                )
+                              : null,
+                          color: isSelected ? null : Colors.white.withOpacity(0.7),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: isSelected 
+                                ? AppDesign.primaryColor.withOpacity(0.5)
+                                : Colors.grey.shade200,
+                            width: 1.5,
+                          ),
+                          boxShadow: isSelected ? [
+                            BoxShadow(
+                              color: AppDesign.primaryColor.withOpacity(0.3),
+                              blurRadius: 15,
+                              offset: const Offset(0, 4),
+                            ),
+                          ] : [],
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        child: Center(
+                          child: Text(
+                            model.name,
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: isSelected ? Colors.white : Colors.black87,
+                              letterSpacing: -0.2,
+                              height: 1.2,
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 );
               },
               childCount: _models.length,
-            ),
-                 ),
-           ),
-      ],
-    );
-  }
-
-  // ADIM 3: Araç Seçimi (CupertinoListSection ile)
-  Widget _buildVehicleStep() {
-    if (_vehicles.isEmpty) {
-      return const SliverFillRemaining(child: Center(child: CupertinoActivityIndicator()));
-    }
-    return SliverMainAxisGroup(
-      slivers: [
-        _buildStepHeader('Araç Detayı', '${_selectedModel?.name ?? ""} için motor ve donanım seçin.'),
-        SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          sliver: SliverToBoxAdapter(
-            child: Container(
-              decoration: BoxDecoration(
-                color: CupertinoColors.systemGroupedBackground,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                children: _vehicles.map((vehicle) {
-                  final isSelected = _selectedVehicle?.id == vehicle.id;
-                  return Container(
-                    decoration: BoxDecoration(
-                      color: CupertinoColors.systemBackground,
-                      border: Border(
-                        bottom: BorderSide(
-                          color: CupertinoColors.separator,
-                          width: 0.5,
-                        ),
-                      ),
-                    ),
-                    child: CupertinoListTile(
-                      title: Text(vehicle.modificationEngine, style: TextStyle(color: isSelected ? AppDesign.primaryColor : CupertinoColors.label)),
-                      subtitle: Text('${vehicle.fuelConsumption.combined}L/100km • ${vehicle.yearRef}'),
-                      onTap: () {
-                        setState(() { _selectedVehicle = vehicle; });
-                        Future.delayed(const Duration(milliseconds: 200), _goToNextStep);
-                      },
-                      trailing: isSelected
-                          ? const Icon(CupertinoIcons.checkmark_circle_fill, color: AppDesign.primaryColor)
-                          : null,
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-          ),
-        )
-      ],
-    );
-  }
-
-  // ADIM 4: Araç Sınıfı
-  Widget _buildVehicleClassStep() {
-    return SliverMainAxisGroup(
-      slivers: [
-        _buildStepHeader('Araç Sınıfı', 'Geçiş ücreti hesaplamaları için gereklidir.'),
-        SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          sliver: SliverToBoxAdapter(
-            child: Container(
-              decoration: BoxDecoration(
-                color: CupertinoColors.systemGroupedBackground,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                children: VehicleData.vehicleClasses.map((vehicleClass) {
-                  final isSelected = _selectedVehicleClass == vehicleClass['id'];
-                  return Container(
-                    decoration: BoxDecoration(
-                      color: CupertinoColors.systemBackground,
-                      border: Border(
-                        bottom: BorderSide(
-                          color: CupertinoColors.separator,
-                          width: 0.5,
-                        ),
-                      ),
-                    ),
-                    child: CupertinoListTile(
-                      title: Text(vehicleClass['name']!, style: TextStyle(color: isSelected ? AppDesign.primaryColor : CupertinoColors.label)),
-                      subtitle: Text(vehicleClass['description']!),
-                      onTap: () {
-                        setState(() { _selectedVehicleClass = vehicleClass['id']; });
-                        Future.delayed(const Duration(milliseconds: 200), _goToNextStep);
-                      },
-                      leading: Text(vehicleClass['icon']!, style: const TextStyle(fontSize: 28)),
-                      trailing: isSelected
-                          ? const Icon(CupertinoIcons.checkmark_circle_fill, color: AppDesign.primaryColor)
-                          : null,
-                    ),
-                  );
-                }).toList(),
-              ),
             ),
           ),
         ),
@@ -617,58 +726,218 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
     );
   }
 
-  // ADIM 5: Yakıt Türü
-  Widget _buildFuelTypeStep() {
-    final icons = {
-      'Benzin': CupertinoIcons.flame,
-      'Dizel': CupertinoIcons.drop,
-      'LPG': CupertinoIcons.circle_grid_3x3_fill,
-      'Elektrik': CupertinoIcons.bolt_fill,
-      'Hibrit': CupertinoIcons.leaf_arrow_circlepath,
-    };
-
+  // ADIM 3: Araç Seçimi (CupertinoListSection ile)
+  Widget _buildVehicleStep() {
+    if (_vehicles.isEmpty) {
+      return SliverFillRemaining(
+        child: Center(
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.0, end: 1.0),
+            duration: const Duration(milliseconds: 800),
+            curve: Curves.easeOut,
+            builder: (context, value, child) {
+              return Transform.scale(
+                scale: 0.5 + (0.5 * value),
+                child: Opacity(opacity: value, child: child),
+              );
+            },
+            child: const CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(AppDesign.primaryColor),
+            ),
+          ),
+        ),
+      );
+    }
     return SliverMainAxisGroup(
       slivers: [
-        _buildStepHeader('Yakıt Türü', 'Yakıt maliyeti hesaplamaları için gereklidir.'),
+        _buildStepHeader('Araç Detayı', '${_selectedModel?.name ?? ""} için motor ve donanım seçin.', icon: Icons.build_rounded),
         SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          sliver: SliverGrid(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-              childAspectRatio: 1.4,
-            ),
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          sliver: SliverList(
             delegate: SliverChildBuilderDelegate(
               (context, index) {
-                final fuelType = VehicleData.fuelTypes[index];
-                final isSelected = _selectedFuelType == fuelType;
-                return CupertinoButton(
-                  onPressed: () {
-                    setState(() { _selectedFuelType = fuelType; });
-                    Future.delayed(const Duration(milliseconds: 200), _goToNextStep);
+                final vehicle = _vehicles[index];
+                final isSelected = _selectedVehicle?.id == vehicle.id;
+                
+                return TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0.0, end: 1.0),
+                  duration: Duration(milliseconds: 250 + (index * 60)),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, value, child) {
+                    return Transform.translate(
+                      offset: Offset(30 * (1 - value), 0),
+                      child: Opacity(opacity: value, child: child),
+                    );
                   },
-                  color: isSelected ? AppDesign.primaryColor : CupertinoColors.white,
-                  padding: const EdgeInsets.all(8),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(icons[fuelType], size: 28, color: isSelected ? CupertinoColors.white : CupertinoColors.secondaryLabel),
-                      const SizedBox(height: 8),
-                      Text(
-                        fuelType,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                          color: isSelected ? CupertinoColors.white : CupertinoColors.label,
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      gradient: isSelected
+                          ? LinearGradient(
+                              colors: [
+                                AppDesign.primaryColor.withOpacity(0.15),
+                                AppDesign.primaryColor.withOpacity(0.05),
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            )
+                          : null,
+                      color: isSelected ? null : Colors.white.withOpacity(0.75),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(
+                        color: isSelected 
+                            ? AppDesign.primaryColor.withOpacity(0.5) 
+                            : Colors.grey.shade200,
+                        width: 2,
+                      ),
+                      boxShadow: isSelected ? [
+                        BoxShadow(
+                          color: AppDesign.primaryColor.withOpacity(0.25),
+                          blurRadius: 16,
+                          offset: const Offset(0, 6),
+                        ),
+                      ] : [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () {
+                          setState(() { _selectedVehicle = vehicle; });
+                          Future.delayed(const Duration(milliseconds: 250), _goToNextStep);
+                        },
+                        borderRadius: BorderRadius.circular(18),
+                        child: Padding(
+                          padding: const EdgeInsets.all(18),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 54,
+                                height: 54,
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: isSelected 
+                                        ? [AppDesign.primaryColor, AppDesign.primaryColor.withOpacity(0.7)]
+                                        : [Colors.grey.shade400, Colors.grey.shade300],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                  borderRadius: BorderRadius.circular(14),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: (isSelected ? AppDesign.primaryColor : Colors.grey).withOpacity(0.3),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(
+                                  Icons.settings_outlined,
+                                  color: Colors.white,
+                                  size: 26,
+                                ),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      vehicle.modificationEngine,
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w700,
+                                        color: isSelected ? AppDesign.primaryColor : Colors.black87,
+                                        letterSpacing: -0.2,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFFF6B6B).withOpacity(0.15),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(Icons.local_gas_station_rounded, size: 12, color: Color(0xFFFF6B6B)),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                '${vehicle.fuelConsumption.combined}L',
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: Color(0xFFFF6B6B),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF4ECDC4).withOpacity(0.15),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(Icons.calendar_today_rounded, size: 12, color: Color(0xFF4ECDC4)),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                vehicle.yearRef,
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: Color(0xFF4ECDC4),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (isSelected)
+                                Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    color: AppDesign.primaryColor,
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: AppDesign.primaryColor.withOpacity(0.4),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Icon(
+                                    Icons.check_rounded,
+                                    color: Colors.white,
+                                    size: 18,
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
                       ),
-                    ],
+                    ),
                   ),
                 );
               },
-              childCount: VehicleData.fuelTypes.length,
+              childCount: _vehicles.length,
             ),
           ),
         )
@@ -676,38 +945,351 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
     );
   }
 
-  // ADIM 6: Yıl Seçimi
+  // ADIM 4: Araç Sınıfı - Modern Glass List
+  Widget _buildVehicleClassStep() {
+    final classColors = {
+      '1': const Color(0xFF4CAF50),
+      '2': const Color(0xFF2196F3),
+      '3': const Color(0xFFFF9800),
+      '4': const Color(0xFFF44336),
+      '5': const Color(0xFF9C27B0),
+    };
+    
+    return SliverMainAxisGroup(
+      slivers: [
+        _buildStepHeader('Araç Sınıfı', 'Geçiş ücreti hesaplamaları için gereklidir.', icon: Icons.category_rounded),
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final vehicleClass = VehicleData.vehicleClasses[index];
+                final isSelected = _selectedVehicleClass == vehicleClass['id'];
+                final color = classColors[vehicleClass['id']] ?? Colors.grey;
+                
+                return TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0.0, end: 1.0),
+                  duration: Duration(milliseconds: 300 + (index * 70)),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, value, child) {
+                    return Transform.translate(
+                      offset: Offset(20 * (1 - value), 0),
+                      child: Opacity(opacity: value, child: child),
+                    );
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      gradient: isSelected
+                          ? LinearGradient(
+                              colors: [
+                                color.withOpacity(0.2),
+                                color.withOpacity(0.1),
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            )
+                          : null,
+                      color: isSelected ? null : Colors.white.withOpacity(0.7),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: isSelected ? color.withOpacity(0.5) : Colors.grey.shade200,
+                        width: 2,
+                      ),
+                      boxShadow: isSelected ? [
+                        BoxShadow(
+                          color: color.withOpacity(0.3),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
+                        ),
+                      ] : [],
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () {
+                          setState(() { _selectedVehicleClass = vehicleClass['id']; });
+                          Future.delayed(const Duration(milliseconds: 300), _goToNextStep);
+                        },
+                        borderRadius: BorderRadius.circular(20),
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 60,
+                                height: 60,
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [color, color.withOpacity(0.7)],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                  borderRadius: BorderRadius.circular(16),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: color.withOpacity(0.3),
+                                      blurRadius: 12,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    vehicleClass['icon']!,
+                                    style: const TextStyle(fontSize: 32),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      vehicleClass['name']!,
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w700,
+                                        color: isSelected ? color : Colors.black87,
+                                        letterSpacing: -0.3,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      vehicleClass['description']!,
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: Colors.grey.shade600,
+                                        height: 1.3,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (isSelected)
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: color,
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: color.withOpacity(0.4),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Icon(
+                                    Icons.check_rounded,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+              childCount: VehicleData.vehicleClasses.length,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ADIM 5: Yakıt Türü - Modern Icons
+  Widget _buildFuelTypeStep() {
+    final fuelData = {
+      'Benzin': {'icon': Icons.local_gas_station_rounded, 'color': const Color(0xFFFF6B6B)},
+      'Dizel': {'icon': Icons.water_drop_rounded, 'color': const Color(0xFF4ECDC4)},
+      'LPG': {'icon': Icons.propane_tank_rounded, 'color': const Color(0xFF95E1D3)},
+      'Elektrik': {'icon': Icons.electric_bolt_rounded, 'color': const Color(0xFFFECA57)},
+      'Hibrit': {'icon': Icons.eco_rounded, 'color': const Color(0xFF48C774)},
+    };
+
+    return SliverMainAxisGroup(
+      slivers: [
+        _buildStepHeader('Yakıt Türü', 'Yakıt maliyeti hesaplamaları için gereklidir.', icon: Icons.local_gas_station_rounded),
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 1.3,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final fuelType = VehicleData.fuelTypes[index];
+                final isSelected = _selectedFuelType == fuelType;
+                final data = fuelData[fuelType]!;
+                
+                return TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0.0, end: 1.0),
+                  duration: Duration(milliseconds: 300 + (index * 50)),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, value, child) {
+                    return Transform.scale(
+                      scale: 0.8 + (0.2 * value),
+                      child: Opacity(opacity: value, child: child),
+                    );
+                  },
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () {
+                        setState(() { _selectedFuelType = fuelType; });
+                        Future.delayed(const Duration(milliseconds: 300), _goToNextStep);
+                      },
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: isSelected
+                              ? LinearGradient(
+                                  colors: [
+                                    data['color'] as Color,
+                                    (data['color'] as Color).withOpacity(0.7),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                )
+                              : null,
+                          color: isSelected ? null : Colors.white.withOpacity(0.7),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: isSelected 
+                                ? (data['color'] as Color).withOpacity(0.5)
+                                : Colors.grey.shade200,
+                            width: 1.5,
+                          ),
+                          boxShadow: isSelected ? [
+                            BoxShadow(
+                              color: (data['color'] as Color).withOpacity(0.3),
+                              blurRadius: 20,
+                              offset: const Offset(0, 8),
+                            ),
+                          ] : [],
+                        ),
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              data['icon'] as IconData,
+                              size: 40,
+                              color: isSelected ? Colors.white : (data['color'] as Color),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              fuelType,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: isSelected ? Colors.white : Colors.black87,
+                                letterSpacing: -0.3,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+              childCount: VehicleData.fuelTypes.length,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ADIM 6: Yıl Seçimi - Modern Chips
   Widget _buildYearStep() {
     final years = VehicleData.years;
     return SliverMainAxisGroup(
       slivers: [
-        _buildStepHeader('Model Yılı', 'Aracınızın üretildiği yılı seçin.'),
+        _buildStepHeader('Model Yılı', 'Aracınızın üretildiği yılı seçin.', icon: Icons.calendar_today_rounded),
         SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
+          padding: const EdgeInsets.symmetric(horizontal: 24),
           sliver: SliverGrid(
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
+              crossAxisCount: 4,
               crossAxisSpacing: 10,
               mainAxisSpacing: 10,
-              childAspectRatio: 2.5,
+              childAspectRatio: 1.8,
             ),
             delegate: SliverChildBuilderDelegate(
               (context, index) {
                 final year = years[index];
                 final isSelected = _selectedYear == year;
-                return CupertinoButton(
-                  onPressed: () {
-                    setState(() { _selectedYear = year; });
-                    Future.delayed(const Duration(milliseconds: 200), _goToNextStep);
+                
+                return TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0.0, end: 1.0),
+                  duration: Duration(milliseconds: 200 + (index * 20)),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, value, child) {
+                    return Transform.scale(
+                      scale: 0.8 + (0.2 * value),
+                      child: Opacity(opacity: value, child: child),
+                    );
                   },
-                  color: isSelected ? AppDesign.primaryColor : CupertinoColors.white,
-                  padding: const EdgeInsets.all(8),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Text(
-                    year.toString(),
-                    style: TextStyle(
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                      color: isSelected ? CupertinoColors.white : CupertinoColors.label,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () {
+                        setState(() { _selectedYear = year; });
+                        Future.delayed(const Duration(milliseconds: 250), _goToNextStep);
+                      },
+                      borderRadius: BorderRadius.circular(14),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: isSelected
+                              ? LinearGradient(
+                                  colors: [
+                                    AppDesign.primaryColor,
+                                    AppDesign.primaryColor.withOpacity(0.8),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                )
+                              : null,
+                          color: isSelected ? null : Colors.white.withOpacity(0.7),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: isSelected 
+                                ? AppDesign.primaryColor.withOpacity(0.5)
+                                : Colors.grey.shade200,
+                            width: 1.5,
+                          ),
+                          boxShadow: isSelected ? [
+                            BoxShadow(
+                              color: AppDesign.primaryColor.withOpacity(0.3),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ] : [],
+                        ),
+                        child: Center(
+                          child: Text(
+                            year.toString(),
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: isSelected ? Colors.white : Colors.black87,
+                              letterSpacing: -0.3,
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 );
@@ -720,26 +1302,50 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
     );
   }
 
-  // ADIM 7: Plaka (CupertinoTextField ile)
+  // ADIM 7: Plaka - Modern Glass Input
   Widget _buildPlateStep() {
     return SliverMainAxisGroup(
       slivers: [
-        _buildStepHeader('Plaka (Opsiyonel)', 'Plaka bilginizi sadece siz görebilirsiniz.'),
+        _buildStepHeader('Plaka (Opsiyonel)', 'Plaka bilginizi sadece siz görebilirsiniz.', icon: Icons.credit_card_rounded),
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: CupertinoTextField(
-              controller: _plateController,
-              placeholder: '34 ABC 123',
-              prefix: const Padding(
-                padding: EdgeInsets.only(left: 12.0),
-                child: Icon(CupertinoIcons.car_detailed, color: CupertinoColors.systemGrey),
-              ),
-              textCapitalization: TextCapitalization.characters,
-              padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Container(
               decoration: BoxDecoration(
-                color: CupertinoColors.white,
-                borderRadius: BorderRadius.circular(12),
+                color: Colors.white.withOpacity(0.7),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.grey.shade200, width: 1.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 15,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: TextField(
+                controller: _plateController,
+                textCapitalization: TextCapitalization.characters,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 2,
+                ),
+                textAlign: TextAlign.center,
+                decoration: InputDecoration(
+                  hintText: '34 ABC 123',
+                  hintStyle: TextStyle(
+                    color: Colors.grey.shade400,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  prefixIcon: Icon(
+                    Icons.directions_car_rounded,
+                    color: AppDesign.primaryColor,
+                    size: 28,
+                  ),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.all(20),
+                ),
               ),
             ),
           ),
@@ -748,81 +1354,115 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
     );
   }
   
-  // ADIM 8: Tüketim (CupertinoTextField ile)
+  // ADIM 8: Tüketim - Modern Glass Inputs
   Widget _buildConsumptionStep() {
     return SliverMainAxisGroup(
       slivers: [
-        _buildStepHeader('Tüketim (Opsiyonel)', 'Daha doğru maliyet hesaplamaları için.'),
+        _buildStepHeader('Tüketim (Opsiyonel)', 'Daha doğru maliyet hesaplamaları için.', icon: Icons.speed_rounded),
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Container(
-              decoration: BoxDecoration(
-                color: CupertinoColors.systemGroupedBackground,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: CupertinoColors.secondarySystemGroupedBackground,
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(12),
-                        topRight: Radius.circular(12),
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              children: [
+                // Şehir İçi
+                Container(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.grey.shade200, width: 1.5),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 15,
+                        offset: const Offset(0, 4),
                       ),
-                    ),
-                    child: const Text(
-                      'TÜKETİM (L/100KM)',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: CupertinoColors.secondaryLabel,
-                      ),
-                    ),
+                    ],
                   ),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: CupertinoColors.systemBackground,
-                      border: Border(
-                        bottom: BorderSide(
-                          color: CupertinoColors.separator,
-                          width: 0.5,
+                  child: TextField(
+                    controller: _cityConsumptionController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    decoration: InputDecoration(
+                      labelText: 'Şehir İçi',
+                      labelStyle: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      hintText: '8.5',
+                      hintStyle: TextStyle(color: Colors.grey.shade400),
+                      prefixIcon: Container(
+                        padding: const EdgeInsets.all(12),
+                        child: const Icon(
+                          Icons.location_city_rounded,
+                          color: Color(0xFFFF6B6B),
+                          size: 24,
                         ),
                       ),
-                    ),
-                    child: CupertinoTextField.borderless(
-                      controller: _cityConsumptionController,
-                      placeholder: 'Şehir İçi (örn: 8.5)',
-                      prefix: const Padding(
-                        padding: EdgeInsets.only(left: 12.0),
-                        child: Icon(CupertinoIcons.building_2_fill, color: CupertinoColors.systemGrey),
+                      suffixText: 'L/100km',
+                      suffixStyle: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontWeight: FontWeight.w500,
                       ),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.all(20),
                     ),
                   ),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: CupertinoColors.systemBackground,
-                      borderRadius: const BorderRadius.only(
-                        bottomLeft: Radius.circular(12),
-                        bottomRight: Radius.circular(12),
+                ),
+                
+                // Şehir Dışı
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.grey.shade200, width: 1.5),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 15,
+                        offset: const Offset(0, 4),
                       ),
+                    ],
+                  ),
+                  child: TextField(
+                    controller: _highwayConsumptionController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
                     ),
-                    child: CupertinoTextField.borderless(
-                      controller: _highwayConsumptionController,
-                      placeholder: 'Şehir Dışı (örn: 6.2)',
-                      prefix: const Padding(
-                        padding: EdgeInsets.only(left: 12.0),
-                        child: Icon(CupertinoIcons.bold, color: CupertinoColors.systemGrey),
+                    decoration: InputDecoration(
+                      labelText: 'Şehir Dışı',
+                      labelStyle: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
                       ),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      hintText: '6.2',
+                      hintStyle: TextStyle(color: Colors.grey.shade400),
+                      prefixIcon: Container(
+                        padding: const EdgeInsets.all(12),
+                        child: const Icon(
+                          Icons.directions_car_rounded,
+                          color: Color(0xFF4ECDC4),
+                          size: 24,
+                        ),
+                      ),
+                      suffixText: 'L/100km',
+                      suffixStyle: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.all(20),
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
@@ -830,48 +1470,145 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
     );
   }
 
-  // Apple stili alt buton barı
-  Widget _buildBottomButtons() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
-      decoration: const BoxDecoration(
-        color: CupertinoColors.systemGroupedBackground,
-        border: Border(top: BorderSide(color: CupertinoColors.systemGrey4, width: 0.5)),
-      ),
-      child: Row(
-        children: [
-          if (_currentStep > 0)
-            Expanded(
-              child: CupertinoButton(
-                onPressed: _goToPreviousStep,
-                child: const Text('Geri'),
-              ),
+  // Modern Apple-like glassmorphic bottom bar
+  Widget _buildModernBottomBar() {
+    return ClipRRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.8),
+            border: Border(
+              top: BorderSide(color: Colors.grey.shade200, width: 0.5),
             ),
-          if (_currentStep > 0) const SizedBox(width: 12),
-          Expanded(
-            flex: 2,
-            child: CupertinoButton.filled(
-              onPressed: _isSaving ? null : (_currentStep == 7 ? _saveVehicle : (_canGoNext ? _goToNextStep : null)),
-              borderRadius: BorderRadius.circular(12),
-              child: _isSaving
-                  ? const CupertinoActivityIndicator(color: CupertinoColors.white)
-                  : Text(
-                      _currentStep == 7 ? 'Kaydet' : 'Devam',
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: CupertinoColors.white),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 30,
+                offset: const Offset(0, -10),
+              ),
+            ],
+          ),
+          child: SafeArea(
+            top: false,
+            child: Row(
+              children: [
+                if (_currentStep > 0) ...[
+                  Expanded(
+                    child: _buildGlassButton(
+                      onPressed: _goToPreviousStep,
+                      label: 'Geri',
+                      icon: Icons.arrow_back_ios_rounded,
+                      isPrimary: false,
                     ),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+                Expanded(
+                  flex: _currentStep > 0 ? 2 : 1,
+                  child: _buildGlassButton(
+                    onPressed: _isSaving ? null : (_currentStep == 7 ? _saveVehicle : (_canGoNext ? _goToNextStep : null)),
+                    label: _isSaving ? 'Kaydediliyor...' : (_currentStep == 7 ? 'Kaydet' : 'Devam'),
+                    icon: _currentStep == 7 ? Icons.check_circle_rounded : Icons.arrow_forward_ios_rounded,
+                    isPrimary: true,
+                    isLoading: _isSaving,
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGlassButton({
+    required VoidCallback? onPressed,
+    required String label,
+    required IconData icon,
+    required bool isPrimary,
+    bool isLoading = false,
+  }) {
+    final isDisabled = onPressed == null;
+    
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: isPrimary && !isDisabled ? [
+          BoxShadow(
+            color: AppDesign.primaryColor.withOpacity(0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ] : [],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: isDisabled ? null : onPressed,
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            decoration: BoxDecoration(
+              gradient: isPrimary
+                  ? LinearGradient(
+                      colors: isDisabled
+                          ? [Colors.grey.shade300, Colors.grey.shade400]
+                          : [AppDesign.primaryColor, AppDesign.primaryColor.withOpacity(0.8)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    )
+                  : null,
+              color: isPrimary ? null : Colors.white.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(16),
+              border: isPrimary ? null : Border.all(color: Colors.grey.shade300, width: 1),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (!isPrimary && !isLoading)
+                  Icon(icon, size: 18, color: Colors.grey.shade700),
+                if (!isPrimary && !isLoading) const SizedBox(width: 8),
+                if (isLoading)
+                  SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        isPrimary ? Colors.white : AppDesign.primaryColor,
+                      ),
+                    ),
+                  )
+                else
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                      color: isPrimary ? Colors.white : Colors.grey.shade700,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                if (isPrimary && !isLoading) const SizedBox(width: 8),
+                if (isPrimary && !isLoading)
+                  Icon(icon, size: 18, color: Colors.white),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
   
-  // Apple stili SnackBar alternatifleri
+  // Modern bildirim helper'ı
   void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Row(children: [const Icon(Icons.error_outline, color: Colors.white), const SizedBox(width: 12), Expanded(child: Text(message))]),
-      backgroundColor: Colors.red,
-    ));
+    NotificationHelper.show(
+      context,
+      message,
+      isError: true,
+    );
   }
 }
 

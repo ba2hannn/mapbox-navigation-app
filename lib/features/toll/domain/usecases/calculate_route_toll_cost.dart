@@ -1,6 +1,7 @@
 // Path: lib/features/toll/domain/usecases/calculate_route_toll_cost.dart
 
 import 'package:dartz/dartz.dart';
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart' as geo;
 
 import '../../../../core/services/directions_service.dart' as directions;
@@ -28,36 +29,57 @@ class CalculateRouteTollCost implements UseCase<double, RouteTollParams> {
         // YENİ ALGORİTMA: Rota adımlarını ve kavşakları analiz et
         final List<TollGateEntity> detectedGates = [];
         
+        debugPrint('🔍 Gişe arama başlatıldı. Toplam ${allGates.length} gişe veritabanında mevcut.');
+        
         for (final leg in params.route.legs) {
           for (final step in leg.steps) {
             for (final intersection in step.intersections) {
               // Eğer bu intersection bir gişe içeriyorsa...
               if (intersection.tollCollection != null) {
                 final tollLocationFromMapbox = intersection.location;
+                final tollName = intersection.tollCollection!.name;
+
+                debugPrint('📍 Mapbox gişe tespit edildi: "$tollName" konum: [${tollLocationFromMapbox[1]}, ${tollLocationFromMapbox[0]}]');
 
                 // Mapbox'ın verdiği koordinata en yakın gişeyi kendi veritabanımızda bulalım.
                 final matchedGate = _findNearestGateByCoord(tollLocationFromMapbox, allGates);
 
                 if (matchedGate != null) {
+                  debugPrint('✅ Eşleşen gişe bulundu: "${matchedGate.name}" (ID: ${matchedGate.id})');
                   // Eğer daha önce eklemediysek, listeye ekle.
                   if (!detectedGates.any((g) => g.id == matchedGate.id)) {
                     detectedGates.add(matchedGate);
+                    debugPrint('➕ Gişe listeye eklendi: ${matchedGate.name}');
+                  } else {
+                    debugPrint('⏭️ Gişe zaten listede var: ${matchedGate.name}');
                   }
+                } else {
+                  debugPrint('❌ Bu Mapbox gişesine uygun veritabanı gişesi bulunamadı: "$tollName"');
                 }
               }
             }
           }
         }
 
+        debugPrint('📊 Toplam tespit edilen benzersiz gişe sayısı: ${detectedGates.length}');
+        for (int i = 0; i < detectedGates.length; i++) {
+          debugPrint('   ${i + 1}. ${detectedGates[i].name} (ID: ${detectedGates[i].id})');
+        }
+
         if (detectedGates.length < 2) {
+          debugPrint('⚠️ Yeterli gişe bulunamadı (${detectedGates.length}), ücret 0 olarak hesaplandı.');
           return const Right(0.0);
         }
 
         // Ücretleri hesapla...
         double totalCost = 0.0;
+        debugPrint('💰 Gişe ücretleri hesaplanıyor...');
+        
         for (int i = 0; i < detectedGates.length - 1; i++) {
           final entryGate = detectedGates[i];
           final exitGate = detectedGates[i + 1];
+
+          debugPrint('   🔄 ${entryGate.name} → ${exitGate.name} arası ücret hesaplanıyor...');
 
           final costResult = await repository.getTollCost(
             entryGateId: entryGate.id,
@@ -65,14 +87,18 @@ class CalculateRouteTollCost implements UseCase<double, RouteTollParams> {
           );
           
           costResult.fold(
-            (failure) => null,
+            (failure) {
+              debugPrint('   ❌ Ücret hesaplanamadı: $failure');
+            },
             (costEntity) {
               final segmentCost = costEntity.getCostForClass(params.vehicleClass);
+              debugPrint('   ✅ ${entryGate.name} → ${exitGate.name}: ₺${segmentCost.toStringAsFixed(2)}');
               totalCost += segmentCost;
             }
           );
         }
         
+        debugPrint('💵 Toplam hesaplanan gişe ücreti: ₺${totalCost.toStringAsFixed(2)}');
         return Right(totalCost);
       },
     );

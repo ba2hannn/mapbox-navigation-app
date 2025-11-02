@@ -71,13 +71,10 @@ class FuelCostService {
 
   /// Kullanıcının varsayılan aracını getirir
   Future<VehicleModel?> getDefaultVehicle(String userId) async {
-    debugPrint('🔍 getDefaultVehicle çağrıldı - userId: $userId');
     try {
       // Önce SharedPreferences'dan araçları al
       final prefs = await SharedPreferences.getInstance();
       final vehiclesJson = prefs.getStringList('vehicles') ?? [];
-
-      debugPrint('📋 Local storage\'dan araç sayısı: ${vehiclesJson.length}');
 
       if (vehiclesJson.isNotEmpty) {
         // İlk aracı döndür (şimdilik varsayılan mantığı yok)
@@ -85,19 +82,15 @@ class FuelCostService {
           final vehicleJson = vehiclesJson.first;
           final vehicleMap = jsonDecode(vehicleJson) as Map<String, dynamic>;
           final vehicle = VehicleModel.fromJson(vehicleMap);
-          debugPrint('✅ LOCAL ARAÇ: ${vehicle.brand} ${vehicle.model}');
+          debugPrint('✅ Araç: ${vehicle.brand} ${vehicle.model} (${vehicle.fuelType})');
           return vehicle;
         } catch (e) {
-          debugPrint('❌ Local araç parse hatası: $e');
-          debugPrint('Vehicle JSON: ${vehiclesJson.first}');
-          // Parse hatası varsa local storage'ı temizle
-          debugPrint('🧹 Local storage temizleniyor...');
+          debugPrint('❌ Araç parse hatası: $e');
           await prefs.remove('vehicles');
         }
       }
 
       // Local storage'da araç yoksa Firestore'dan al (fallback)
-      debugPrint('📋 Local storage boş, Firestore\'dan çekiliyor...');
       final querySnapshot = await _firestore
           .collection('users')
           .doc(userId)
@@ -106,11 +99,8 @@ class FuelCostService {
           .limit(1)
           .get();
 
-      debugPrint('📋 Varsayılan araç sorgusu sonucu: ${querySnapshot.docs.length} araç bulundu');
-
       if (querySnapshot.docs.isNotEmpty) {
         final vehicle = VehicleModel.fromFirestore(querySnapshot.docs.first);
-        debugPrint('✅ VARSAYILAN ARAÇ: ${vehicle.brand} ${vehicle.model}');
         return vehicle;
       }
 
@@ -122,18 +112,14 @@ class FuelCostService {
           .limit(1)
           .get();
 
-      debugPrint('📋 Tüm araç sorgusu sonucu: ${allVehicles.docs.length} araç bulundu');
-
       if (allVehicles.docs.isNotEmpty) {
         final vehicle = VehicleModel.fromFirestore(allVehicles.docs.first);
-        debugPrint('✅ İLK ARAÇ: ${vehicle.brand} ${vehicle.model}');
         return vehicle;
       }
 
-      debugPrint('❌ HİÇ ARAÇ BULUNAMADI');
       return null;
     } catch (e) {
-      debugPrint('💥 getDefaultVehicle HATASI: $e');
+      debugPrint('❌ getDefaultVehicle hatası: $e');
       return null;
     }
   }

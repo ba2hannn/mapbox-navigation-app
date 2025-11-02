@@ -62,6 +62,9 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
   int _selectedRouteIndex = 0;
   bool _isInRoutePreview = false;
 
+  // Fuel data cache - route index ile eşleştirme
+  final Map<int, Map<String, double>> _fuelDataCache = {};
+
   late AnimationController _bottomSheetController;
   double _bottomSheetPosition = 0.0;
   final double _minBottomSheetHeight = 140.0;
@@ -134,7 +137,7 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
       body: BlocConsumer<MapBloc, MapState>(
         listener: (context, state) {
           if (state is MapError) {
-            AnimatedNotification.showError(context, message: state.message);
+            NotificationHelper.show(context, state.message, isError: true);
           }
           if (state is MapLoaded && state.userLocation != null) {
             _userLocationPoint = Point(coordinates: Position(state.userLocation!.longitude, state.userLocation!.latitude));
@@ -403,18 +406,28 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
 
   Future<void> _toggleTraffic() async {
     if (_mapboxMap == null) return;
+    final previousState = _showTraffic;
     setState(() => _showTraffic = !_showTraffic);
     try {
       if (_showTraffic) {
         await _addTrafficLayers();
-        if (mounted) AnimatedNotification.showSuccess(context, message: '🚦 Trafik yoğunluğu gösteriliyor');
+        // Başarılı olduktan sonra UI'ı güncelle
+        if (mounted) {
+          setState(() {}); // Force update UI
+          NotificationHelper.show(context, 'Trafik yoğunluğu gösteriliyor');
+        }
       } else {
         await _removeTrafficLayers();
+        // Başarılı olduktan sonra UI'ı güncelle
+        if (mounted) setState(() {}); // Force update UI
       }
     } catch (e) {
       debugPrint('❌ Trafik toggle hatası: $e');
-      setState(() => _showTraffic = !_showTraffic);
-      if (mounted) AnimatedNotification.showError(context, message: 'Trafik bilgisi yüklenemedi');
+      // Hata durumunda önceki state'e geri dön
+      if (mounted) {
+        setState(() => _showTraffic = previousState);
+        NotificationHelper.show(context, 'Trafik bilgisi yüklenemedi', isError: true);
+      }
     }
   }
 
@@ -429,6 +442,8 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
       await _mapboxMap!.style.addLayer(LineLayer(id: 'route-line', sourceId: 'route-source', lineWidth: 6.0, lineColor: AppDesign.primaryColor.toARGB32(), lineCap: LineCap.ROUND, lineJoin: LineJoin.ROUND));
       final bottomPadding = _minBottomSheetHeight + MediaQuery.of(context).padding.bottom + 20;
       await _zoomToRoute(route, bottomPadding: bottomPadding);
+      // UI'ı güncelle
+      if (mounted) setState(() {});
       debugPrint('✅ Rota çizildi');
     } catch (e) {
       debugPrint('❌ Rota çizme hatası: $e');
@@ -439,36 +454,78 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
     if (_mapboxMap == null || routes.isEmpty) return;
     try {
       await _clearAllRoutes();
-      // Sadece seçili rotayı çiz
-      final selectedRoute = routes[_selectedRouteIndex];
-      final coordinates = selectedRoute.geometry.map((c) => [c[0], c[1]]).toList();
-      final geoJson = {'type': 'Feature', 'geometry': {'type': 'LineString', 'coordinates': coordinates}};
-      await _mapboxMap!.style.addSource(GeoJsonSource(id: 'route-preview-source-selected', data: json.encode(geoJson)));
-      await _mapboxMap!.style.addLayer(LineLayer(id: 'route-preview-shadow-selected', sourceId: 'route-preview-source-selected', lineWidth: 10.0, lineColor: Colors.black.withOpacity(0.25).toARGB32(), lineBlur: 4.0));
-      await _mapboxMap!.style.addLayer(LineLayer(id: 'route-preview-line-selected', sourceId: 'route-preview-source-selected', lineWidth: 8.0, lineColor: AppDesign.primaryColor.toARGB32(), lineCap: LineCap.ROUND, lineJoin: LineJoin.ROUND));
+
+      // Önce seçili olmayan rotaları çiz (gri), sonra seçili rotayı çiz (mavi) - böylece seçili rota üstte kalır
+      for (int i = 0; i < routes.length; i++) {
+        final route = routes[i];
+        final isSelected = i == _selectedRouteIndex;
+
+        // Seçili olmayan rotaları önce çiz
+        if (!isSelected) {
+          await _drawSingleRoute(route, i, isSelected);
+        }
+      }
+
+      // Seçili rotayı en son çiz (üstte kalması için)
+      if (_selectedRouteIndex < routes.length) {
+        final selectedRoute = routes[_selectedRouteIndex];
+        await _drawSingleRoute(selectedRoute, _selectedRouteIndex, true);
+      }
+
       final bottomPadding = MediaQuery.of(context).size.height * 0.4 + 20;
       await _zoomToAllRoutes(routes, bottomPadding: bottomPadding);
-      debugPrint('✅ Seçili rota çizildi');
+      debugPrint('✅ Tüm rotalar çizildi (${routes.length} rota)');
     } catch (e) {
-      debugPrint('❌ Seçili rota çizme hatası: $e');
+      debugPrint('❌ Çoklu rota çizme hatası: $e');
     }
+  }
+
+  Future<void> _drawSingleRoute(directions.Route route, int index, bool isSelected) async {
+    final coordinates = route.geometry.map((c) => [c[0], c[1]]).toList();
+    final geoJson = {'type': 'Feature', 'geometry': {'type': 'LineString', 'coordinates': coordinates}};
+
+    final sourceId = 'route-preview-source-$index';
+    final shadowLayerId = 'route-preview-shadow-$index';
+    final lineLayerId = 'route-preview-line-$index';
+
+    await _mapboxMap!.style.addSource(GeoJsonSource(id: sourceId, data: json.encode(geoJson)));
+
+    // Gölge layer (tüm rotalar için)
+    await _mapboxMap!.style.addLayer(LineLayer(
+      id: shadowLayerId,
+      sourceId: sourceId,
+      lineWidth: isSelected ? 10.0 : 6.0,
+      lineColor: Colors.black.withOpacity(isSelected ? 0.25 : 0.15).toARGB32(),
+      lineBlur: 4.0
+    ));
+
+    // Ana rota çizgisi - seçili rota mavi, diğerleri gri
+    await _mapboxMap!.style.addLayer(LineLayer(
+      id: lineLayerId,
+      sourceId: sourceId,
+      lineWidth: isSelected ? 8.0 : 5.0,
+      lineColor: isSelected ? AppDesign.primaryColor.toARGB32() : Colors.grey.shade500.toARGB32(),
+      lineCap: LineCap.ROUND,
+      lineJoin: LineJoin.ROUND
+    ));
   }
 
   Future<void> _clearAllRoutes() async {
     if (_mapboxMap == null) return;
     try {
-      // Seçili rota layer'larını temizle
+      // Seçili rota layer'larını temizle (eski yapı için)
       await _mapboxMap!.style.removeStyleLayer('route-preview-line-selected').catchError((_) {});
       await _mapboxMap!.style.removeStyleLayer('route-preview-shadow-selected').catchError((_) {});
       await _mapboxMap!.style.removeStyleSource('route-preview-source-selected').catchError((_) {});
-      
-      // Eski çoklu rota layer'larını da temiz (geriye uyumluluk için)
-      for (int i = 0; i < 3; i++) {
+
+      // Çoklu rota layer'larını temizle (yeni yapı)
+      // Maksimum 10 rota olduğunu varsayarak temizle
+      for (int i = 0; i < 10; i++) {
         await _mapboxMap!.style.removeStyleLayer('route-preview-line-$i').catchError((_) {});
         await _mapboxMap!.style.removeStyleLayer('route-preview-shadow-$i').catchError((_) {});
         await _mapboxMap!.style.removeStyleSource('route-preview-source-$i').catchError((_) {});
       }
-      
+
       await _mapboxMap!.style.removeStyleLayer('route-line').catchError((_) {});
       await _mapboxMap!.style.removeStyleLayer('route-line-shadow').catchError((_) {});
       await _mapboxMap!.style.removeStyleSource('route-source').catchError((_) {});
@@ -484,7 +541,54 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
       _isInRoutePreview = false;
       _availableRoutes = [];
       _selectedRouteIndex = 0;
+      _fuelDataCache.clear(); // Cache'i temizle
     });
+  }
+
+  void _logTollInfo(List<directions.Route> routes) {
+    debugPrint('\n🚧 ===== GİŞE BİLGİLERİ =====');
+    for (int i = 0; i < routes.length; i++) {
+      final route = routes[i];
+      if (route.tollCost != null && route.tollCost! > 0) {
+        debugPrint('\n📍 ROTA ${i + 1} - ${route.routeType == directions.RouteType.fast ? "En Hızlı" : route.routeType == directions.RouteType.tollFree ? "Gişesiz" : "Alternatif"}');
+        debugPrint('💰 Toplam Gişe Ücreti: ₺${route.tollCost!.toStringAsFixed(2)}');
+        debugPrint('📏 Rota Mesafesi: ${route.distanceText}');
+        debugPrint('⏱️ Rota Süresi: ${route.durationText}');
+        
+        // Rota üzerindeki gişe noktalarını listele
+        final tollBooths = <String>[];
+        for (final leg in route.legs) {
+          for (final step in leg.steps) {
+            for (final intersection in step.intersections) {
+              if (intersection.tollCollection != null) {
+                final tollName = intersection.tollCollection!.name;
+                if (tollName.isNotEmpty && !tollBooths.contains(tollName)) {
+                  tollBooths.add(tollName);
+                }
+              }
+            }
+          }
+        }
+        
+        if (tollBooths.isNotEmpty) {
+          debugPrint('🚦 Geçilecek Gişeler:');
+          for (int j = 0; j < tollBooths.length; j++) {
+            debugPrint('   ${j + 1}. ${tollBooths[j]}');
+          }
+        }
+        
+        // Rota üzerindeki gişe noktalarını tahmin et (geometri üzerinden)
+        if (route.geometry.isNotEmpty) {
+          debugPrint('📌 Rota Koordinatları: ${route.geometry.length} nokta');
+          debugPrint('🎯 Başlangıç: [${route.geometry.first[1].toStringAsFixed(4)}, ${route.geometry.first[0].toStringAsFixed(4)}]');
+          debugPrint('🏁 Bitiş: [${route.geometry.last[1].toStringAsFixed(4)}, ${route.geometry.last[0].toStringAsFixed(4)}]');
+        }
+      } else {
+        debugPrint('\n📍 ROTA ${i + 1} - ${route.routeType == directions.RouteType.fast ? "En Hızlı" : route.routeType == directions.RouteType.tollFree ? "Gişesiz" : "Alternatif"}');
+        debugPrint('✅ Gişe Yok - Ücretsiz Rota');
+      }
+    }
+    debugPrint('🚧 ===========================\n');
   }
 
   Future<void> _zoomToRoute(directions.Route route, {double bottomPadding = 200}) async {
@@ -733,6 +837,7 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
                           final destination = result['destination'] as GeocodingResult?;
                           
                           if (routes != null && routes.isNotEmpty) {
+                            _logTollInfo(routes); // Gişe bilgilerini logla
                             setState(() {
                               _availableRoutes = routes;
                               _selectedRouteIndex = 0;
@@ -816,7 +921,7 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
                 onTap: () async {
                   await _clearAllRoutes();
                   _resetRouteState();
-                  if (mounted) AnimatedNotification.showInfo(context, message: 'Rota temizlendi');
+                  if (mounted) NotificationHelper.show(context, 'Rota temizlendi');
                 },
                 child: Container(
                   padding: const EdgeInsets.all(4),
@@ -892,6 +997,7 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
                     final destination = result['destination'] as GeocodingResult?;
                     
                     if (routes != null && routes.isNotEmpty) {
+                      _logTollInfo(routes); // Gişe bilgilerini logla
                       setState(() {
                         _availableRoutes = routes;
                         _selectedRouteIndex = 0;
@@ -1108,7 +1214,7 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
 
                 if (mounted) {
                   Navigator.of(context).pop();
-                  AnimatedNotification.showSuccess(context, message: 'Yer kaydedildi');
+                  NotificationHelper.show(context, 'Yer kaydedildi');
                 }
               },
               child: const Text('Kaydet'),
@@ -1236,6 +1342,7 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
                 final destination = result['destination'] as GeocodingResult?;
                 
                 if (routes != null && routes.isNotEmpty) {
+                  _logTollInfo(routes); // Gişe bilgilerini logla
                   setState(() {
                     _availableRoutes = routes;
                     _selectedRouteIndex = 0;
@@ -1339,6 +1446,7 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
             final destination = result['destination'] as GeocodingResult?;
             
             if (routes != null && routes.isNotEmpty) {
+              _logTollInfo(routes); // Gişe bilgilerini logla
               setState(() {
                 _availableRoutes = routes;
                 _selectedRouteIndex = 0;
@@ -1545,7 +1653,7 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
 
                 if (mounted) {
                   Navigator.of(context).pop();
-                  AnimatedNotification.showSuccess(context, message: 'Yer güncellendi');
+                  NotificationHelper.show(context, 'Yer güncellendi');
                 }
               },
               child: const Text('Güncelle'),
@@ -1581,7 +1689,7 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
       await _loadSavedPlaces();
 
       if (mounted) {
-        AnimatedNotification.showSuccess(context, message: 'Yer silindi');
+        NotificationHelper.show(context, 'Yer silindi');
       }
     }
   }
@@ -1609,6 +1717,26 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
                     onTap: () async {
                       await _clearAllRoutes();
                       _resetRouteState();
+                      // Kullanıcı konumuna zoom yap
+                      if (_userLocationPoint != null) {
+                        await _moveToLocationFast(
+                          _userLocationPoint!.coordinates.lat.toDouble(),
+                          _userLocationPoint!.coordinates.lng.toDouble(),
+                        );
+                      }
+                      // Konum butonunu göster
+                      if (mounted) {
+                        setState(() {
+                          _showLocationButton = true;
+                        });
+                        // Kısa bir süre sonra konum butonunu gizle (kullanıcı konumundayız)
+                        await Future.delayed(const Duration(milliseconds: 500));
+                        if (mounted) {
+                          setState(() {
+                            _showLocationButton = false;
+                          });
+                        }
+                      }
                     },
                     child: Container(
                       padding: const EdgeInsets.all(8),
@@ -1648,16 +1776,16 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
                   String title;
                   switch (route.routeType) {
                     case directions.RouteType.fast:
-                      title = '⚡ Hızlı Rota';
+                      title = 'En Hızlı Rota';
                       break;
                     case directions.RouteType.tollFree:
-                      title = '💰 Ücretsiz Rota';
+                      title = 'Gişesiz Rota';
                       break;
                     case directions.RouteType.city:
-                      title = '🏙️ Şehir İçi Rota';
+                      title = 'Alternatif Rota';
                       break;
                     default:
-                      title = '🚗 Rota ${index + 1}';
+                      title = 'Rota ${index + 1}';
                       break;
                   }
 
@@ -1667,10 +1795,10 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
                       icon = Icons.speed;
                       break;
                     case directions.RouteType.tollFree:
-                      icon = Icons.money_off;
+                      icon = Icons.toll;
                       break;
                     case directions.RouteType.city:
-                      icon = Icons.location_city;
+                      icon = Icons.alt_route;
                       break;
                     default:
                       icon = Icons.directions_car;
@@ -1686,9 +1814,14 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
                       color: Colors.transparent,
                       child: InkWell(
                         onTap: () async {
-                          setState(() => _selectedRouteIndex = index);
-                          await _drawMultipleRoutes(_availableRoutes);
-                          _showRouteDetailsDialog(route, index);
+                          if (isSelected) {
+                            // Zaten seçili ise detayları göster
+                            _showRouteDetailsDialog(route, index);
+                          } else {
+                            // Seçili değilse sadece seç ve haritada göster
+                            setState(() => _selectedRouteIndex = index);
+                            await _drawMultipleRoutes(_availableRoutes);
+                          }
                         },
                         borderRadius: BorderRadius.circular(20),
                         child: AnimatedContainer(
@@ -1696,8 +1829,21 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
                           curve: Curves.easeInOutCubic,
                           padding: const EdgeInsets.all(20),
                           decoration: BoxDecoration(
-                            color: isSelected ? Colors.blue : Colors.blue.shade100,
+                            color: isSelected ? AppDesign.primaryColor : Colors.white,
                             borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: isSelected ? AppDesign.primaryColor : Colors.grey.shade300,
+                              width: isSelected ? 2 : 1,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: isSelected 
+                                    ? AppDesign.primaryColor.withOpacity(0.2) 
+                                    : Colors.black.withOpacity(0.05),
+                                blurRadius: isSelected ? 12 : 8,
+                                offset: Offset(0, isSelected ? 4 : 2),
+                              ),
+                            ],
                           ),
                           child: Column(
                             children: [
@@ -1705,15 +1851,17 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
                                 children: [
                                   AnimatedContainer(
                                     duration: const Duration(milliseconds: 300),
-                                    padding: const EdgeInsets.all(14),
+                                    padding: const EdgeInsets.all(12),
                                     decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(16),
+                                      color: isSelected 
+                                          ? Colors.white.withOpacity(0.2)
+                                          : AppDesign.primaryColor.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Icon(
                                       icon,
-                                      color: isSelected ? Colors.blue : Colors.blue.shade600,
-                                      size: 32,
+                                      color: isSelected ? Colors.white : AppDesign.primaryColor,
+                                      size: 28,
                                     ),
                                   ),
                                   const SizedBox(width: 16),
@@ -1724,9 +1872,9 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
                                         Text(
                                           title,
                                           style: TextStyle(
-                                            fontSize: 20,
+                                            fontSize: 18,
                                             fontWeight: FontWeight.w700,
-                                            color: Colors.white,
+                                            color: isSelected ? Colors.white : AppDesign.textPrimary,
                                             letterSpacing: -0.3,
                                           ),
                                         ),
@@ -1768,7 +1916,7 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
                               ),
                               const SizedBox(height: 20),
                               FutureBuilder<Map<String, double>>(
-                                future: _calculateFuelDataForRoute(route),
+                                future: _calculateFuelDataForRoute(route, index),
                                 builder: (context, snapshot) {
                                   if (snapshot.connectionState == ConnectionState.waiting) {
                                     return Container(
@@ -1804,10 +1952,12 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
                                   final bool hasTollCost = (route.tollCost ?? 0) > 0;
 
                                   return Container(
-                                    padding: const EdgeInsets.all(16),
+                                    padding: const EdgeInsets.all(12),
                                     decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(16),
+                                      color: isSelected 
+                                          ? Colors.white.withOpacity(0.15)
+                                          : Colors.grey.shade100,
+                                      borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Row(
                                       children: [
@@ -1817,14 +1967,15 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
                                             route.distanceText,
                                             Icons.straighten,
                                             isSelected: isSelected,
-                                            routeColor: Colors.white,
                                           ),
                                         ),
                                         Container(
-                                          height: 32,
+                                          height: 28,
                                           width: 1,
-                                          color: Colors.white.withOpacity(0.3),
-                                          margin: const EdgeInsets.symmetric(horizontal: 12),
+                                          color: isSelected 
+                                              ? Colors.white.withOpacity(0.3)
+                                              : Colors.grey.shade300,
+                                          margin: const EdgeInsets.symmetric(horizontal: 8),
                                         ),
                                         Expanded(
                                           child: _buildModernRouteMetric(
@@ -1832,40 +1983,41 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
                                             route.durationText,
                                             Icons.access_time,
                                             isSelected: isSelected,
-                                            routeColor: Colors.white,
                                           ),
                                         ),
                                         if (hasFuelCost) ...[
                                           Container(
-                                            height: 32,
+                                            height: 28,
                                             width: 1,
-                                            color: Colors.white.withOpacity(0.3),
-                                            margin: const EdgeInsets.symmetric(horizontal: 12),
+                                            color: isSelected 
+                                                ? Colors.white.withOpacity(0.3)
+                                                : Colors.grey.shade300,
+                                            margin: const EdgeInsets.symmetric(horizontal: 8),
                                           ),
                                           Expanded(
                                             child: _buildModernRouteMetric(
                                               'Maliyet',
                                               '₺${fuelCost.toStringAsFixed(0)}',
-                                              Icons.attach_money,
+                                              Icons.local_gas_station,
                                               isSelected: isSelected,
-                                              routeColor: Colors.white,
                                             ),
                                           ),
                                         ],
                                         if (hasTollCost) ...[
                                           Container(
-                                            height: 32,
+                                            height: 28,
                                             width: 1,
-                                            color: Colors.white.withOpacity(0.3),
-                                            margin: const EdgeInsets.symmetric(horizontal: 12),
+                                            color: isSelected 
+                                                ? Colors.white.withOpacity(0.3)
+                                                : Colors.grey.shade300,
+                                            margin: const EdgeInsets.symmetric(horizontal: 8),
                                           ),
                                           Expanded(
                                             child: _buildModernRouteMetric(
                                               'Gişe',
                                               '₺${route.tollCost!.toStringAsFixed(0)}',
-                                              Icons.money_rounded,
+                                              Icons.toll,
                                               isSelected: isSelected,
-                                              routeColor: Colors.white,
                                             ),
                                           ),
                                         ],
@@ -1931,12 +2083,15 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
                       // Rotayı segmentlere böl ve navigasyonu başlat
                       await _segmentRouteAndLaunchNavigation(selectedRoute);
 
+                      // Google Maps'e gönderildikten sonra ekranı temizle
                       if (mounted) {
-                        AnimatedNotification.showSuccess(context, message: 'Rota başlatıldı ve navigasyon açıldı');
+                        await _clearAllRoutes();
+                        _resetRouteState();
+                        NotificationHelper.show(context, 'Google Maps\'te yönlendiriliyor');
                       }
                     } catch (e) {
                       if (mounted) {
-                        AnimatedNotification.showError(context, message: 'Rota başlatılırken hata: $e');
+                        NotificationHelper.show(context, 'Rota başlatılırken hata: $e', isError: true);
                       }
                     }
                   },
@@ -1965,28 +2120,27 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
     );
   }
 
-  Future<Map<String, double>> _calculateFuelDataForRoute(directions.Route route) async {
-    debugPrint('🗺️ Map Screen - Yakıt verileri hesaplanıyor...');
+  Future<Map<String, double>> _calculateFuelDataForRoute(directions.Route route, int routeIndex) async {
+    // Cache kontrolü - eğer daha önce hesaplanmışsa cache'den döndür
+    if (_fuelDataCache.containsKey(routeIndex)) {
+      return _fuelDataCache[routeIndex]!;
+    }
+
     try {
       // Kullanıcı giriş yapmış mı kontrol et
       final userId = FirebaseAuth.instance.currentUser?.uid;
       if (userId == null) {
-        debugPrint('❌ Kullanıcı giriş yapmamış');
         return {'cost': 0.0, 'liters': 0.0};
       }
 
       // Varsayılan aracı al
       final defaultVehicle = await _fuelCostService.getDefaultVehicle(userId);
       if (defaultVehicle == null) {
-        debugPrint('❌ Varsayılan araç bulunamadı');
         return {'cost': 0.0, 'liters': 0.0};
       }
 
-      debugPrint('✅ Araç bulundu: ${defaultVehicle.brand} ${defaultVehicle.model}');
-
       // Mesafeyi km'ye çevir
       final distanceKm = route.distance / 1000.0;
-      debugPrint('📏 Mesafe: ${distanceKm.toStringAsFixed(2)} km');
 
       // Trafik seviyesini hesapla
       final trafficLevel = _calculateTrafficLevelForRoute(route);
@@ -1997,9 +2151,6 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
       final elevations = await elevationService.getElevationsAlongRoute(route.geometry);
       final averageSlope = elevationService.calculateAverageSlope(elevations);
 
-      debugPrint('🚦 Trafik seviyesi: $trafficLevel, Ortalama hız: ${averageSpeed?.toStringAsFixed(1)} km/h');
-      debugPrint('🏔️ Ortalama eğim: ${averageSlope.toStringAsFixed(1)}%');
-
       // Yakıt verilerini hesapla
       final fuelData = await _fuelCostService.calculateFuelData(
         distanceKm: distanceKm,
@@ -2009,7 +2160,9 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
         averageSlope: averageSlope,
       );
 
-      debugPrint('💰 Hesaplanan yakıt maliyeti: ₺${fuelData['cost']!.toStringAsFixed(2)}, Litre: ${fuelData['liters']!.toStringAsFixed(2)} L');
+      // Cache'e kaydet
+      _fuelDataCache[routeIndex] = fuelData;
+      
       return fuelData;
     } catch (e) {
       debugPrint('💥 Yakıt verileri hesaplama hatası: $e');
@@ -2083,6 +2236,7 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
         origin: _origin,
         destination: _destination,
         fuelCostService: _fuelCostService,
+        fuelDataCache: _fuelDataCache[routeIndex], // Cache'den gönder
       ),
     );
   }
@@ -2196,7 +2350,7 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
     } catch (e) {
       debugPrint('❌ Harita uzun basma hatası: $e');
       if (mounted) {
-        AnimatedNotification.showError(context, message: 'Konum tespit edilemedi');
+        NotificationHelper.show(context, 'Konum tespit edilemedi', isError: true);
       }
     }
   }
@@ -2243,40 +2397,33 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
     );
   }
 
-  Widget _buildModernRouteMetric(String label, String value, IconData icon, {bool isSelected = false, Color? routeColor}) {
+  Widget _buildModernRouteMetric(String label, String value, IconData icon, {bool isSelected = false}) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.2),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(
-            icon,
-            size: 20,
-            color: Colors.white,
-          ),
+        Icon(
+          icon,
+          size: 18,
+          color: isSelected ? Colors.white : AppDesign.primaryColor,
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
         Text(
           label,
-          style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-            letterSpacing: -0.2,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w500,
+            color: isSelected ? Colors.white.withOpacity(0.9) : AppDesign.textSecondary,
+            letterSpacing: -0.1,
           ),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 2),
         Text(
           value,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w700,
-            color: Colors.white,
+            color: isSelected ? Colors.white : AppDesign.textPrimary,
             letterSpacing: -0.1,
           ),
           textAlign: TextAlign.center,
@@ -2295,7 +2442,7 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
 
   Future<void> _showTripRecordingDialog() async {
     if (_currentTripId == null || _currentRoute == null) {
-      AnimatedNotification.showError(context, message: 'Aktif yolculuk bulunamadı');
+      NotificationHelper.show(context, 'Aktif yolculuk bulunamadı', isError: true);
       return;
     }
 
@@ -2327,49 +2474,8 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
 
   Future<void> _segmentRouteAndLaunchNavigation(directions.Route route) async {
     try {
-      debugPrint('🚗 Rota segmentasyonu başlatılıyor...');
+      debugPrint('🚗 Navigasyon başlatılıyor...');
 
-      // Rotayı 5 parçaya böl ama Google Maps limiti için sadece 3 waypoint kullan
-      final segments = _segmentRouteIntoParts(route, 5);
-      debugPrint('✅ Rota ${segments.length} parçaya bölündü');
-
-      // İlk segment ile navigasyonu başlat (sadece start, end ve 2-3 waypoint)
-      await _launchNavigationWithWaypoints(route, segments);
-
-      if (mounted) {
-        AnimatedNotification.showSuccess(context, message: 'Navigasyon başlatıldı');
-      }
-    } catch (e) {
-      debugPrint('❌ Rota segmentasyonu hatası: $e');
-      if (mounted) {
-        AnimatedNotification.showError(context, message: 'Navigasyon başlatılamadı');
-      }
-    }
-  }
-
-  List<List<List<double>>> _segmentRouteIntoParts(directions.Route route, int parts) {
-    final coordinates = route.geometry;
-    if (coordinates.length < parts * 2) {
-      // Yeterli nokta yoksa tüm rotayı tek parça olarak döndür
-      return [coordinates];
-    }
-
-    final segmentSize = (coordinates.length / parts).ceil();
-    final segments = <List<List<double>>>[];
-
-    for (int i = 0; i < parts; i++) {
-      final startIndex = i * segmentSize;
-      final endIndex = (i == parts - 1) ? coordinates.length : (i + 1) * segmentSize;
-
-      final segment = coordinates.sublist(startIndex, endIndex);
-      segments.add(segment);
-    }
-
-    return segments;
-  }
-
-  Future<void> _launchNavigationWithWaypoints(directions.Route route, List<List<List<double>>> segments) async {
-    try {
       // Başlangıç ve bitiş noktalarını al
       final startCoords = route.geometry.first;
       final endCoords = route.geometry.last;
@@ -2379,34 +2485,8 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
       final endLat = endCoords[1];
       final endLng = endCoords[0];
 
-      // Google Maps waypoint limiti için sadece 2-3 ara nokta seç
-      final waypoints = <String>[];
-      if (segments.length > 2) {
-        // İlk segment hariç, diğer segmentlerin başlangıç noktalarını waypoint olarak ekle
-        // Ama sadece 2-3 tane ekle (Google Maps limiti için)
-        final maxWaypoints = 3;
-        final step = (segments.length - 1) ~/ maxWaypoints; // İlk segment hariç
-
-        for (int i = 1; i < segments.length && waypoints.length < maxWaypoints; i += step) {
-          if (segments[i].isNotEmpty) {
-            final waypoint = segments[i].first;
-            final wpLat = waypoint[1];
-            final wpLng = waypoint[0];
-            waypoints.add('$wpLat,$wpLng');
-          }
-        }
-      }
-
-      // Google Maps URL'si oluştur
-      String googleMapsUrl;
-      if (waypoints.isEmpty) {
-        // Sadece başlangıç ve bitiş
-        googleMapsUrl = 'https://www.google.com/maps/dir/?api=1&origin=$startLat,$startLng&destination=$endLat,$endLng&travelmode=driving';
-      } else {
-        // Waypoint'lerle birlikte
-        final waypointsStr = waypoints.join('/');
-        googleMapsUrl = 'https://www.google.com/maps/dir/?api=1&origin=$startLat,$startLng&destination=$endLat,$endLng&waypoints=$waypointsStr&travelmode=driving';
-      }
+      // Direkt A->B Google Maps URL'i oluştur
+      final googleMapsUrl = 'https://www.google.com/maps/dir/?api=1&origin=$startLat,$startLng&destination=$endLat,$endLng&travelmode=driving';
 
       debugPrint('🗺️ Navigasyon URL: $googleMapsUrl');
 
@@ -2415,6 +2495,10 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
         debugPrint('✅ Navigasyon uygulaması açıldı');
+        
+        if (mounted) {
+          NotificationHelper.show(context, 'Google Maps\'te yönlendiriliyor');
+        }
       } else {
         // Alternatif olarak web tarayıcıda aç
         await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -2422,7 +2506,9 @@ class _MapScreenState extends State<MapScreen> with SingleTickerProviderStateMix
       }
     } catch (e) {
       debugPrint('❌ Navigasyon başlatma hatası: $e');
-      throw e;
+      if (mounted) {
+        NotificationHelper.show(context, 'Navigasyon başlatılamadı', isError: true);
+      }
     }
   }
 
@@ -2558,7 +2644,7 @@ class _AddSavedPlacePanelState extends State<AddSavedPlacePanel> {
       } catch (e) {
         if (mounted) {
           setState(() => _isSearching = false);
-          AnimatedNotification.showError(context, message: 'Arama yapılırken hata oluştu');
+          NotificationHelper.show(context, 'Arama yapılırken hata oluştu', isError: true);
         }
       }
     });
@@ -2724,6 +2810,7 @@ class RouteDetailsDialog extends StatefulWidget {
   final GeocodingResult? origin;
   final GeocodingResult? destination;
   final FuelCostService fuelCostService;
+  final Map<String, double>? fuelDataCache; // Önceden hesaplanmış data
 
   const RouteDetailsDialog({
     super.key,
@@ -2732,6 +2819,7 @@ class RouteDetailsDialog extends StatefulWidget {
     required this.origin,
     required this.destination,
     required this.fuelCostService,
+    this.fuelDataCache,
   });
 
   @override
@@ -2750,7 +2838,13 @@ class _RouteDetailsDialogState extends State<RouteDetailsDialog> {
   @override
   void initState() {
     super.initState();
-    _calculateFuelData();
+    // Eğer cache'de varsa direkt kullan
+    if (widget.fuelDataCache != null) {
+      _fuelData = widget.fuelDataCache;
+      _isLoadingFuel = false;
+    } else {
+      _calculateFuelData();
+    }
     _loadRouteData();
   }
 
@@ -2977,19 +3071,38 @@ class _RouteDetailsDialogState extends State<RouteDetailsDialog> {
   List<String> _getTollDetails() {
     if ((widget.route.tollCost ?? 0) == 0) return [];
 
-    // Mock gişe detayları - gerçekte route data'dan gelecek
-    final tollNames = [
-      'İstanbul Boğazı Köprüsü',
-      'Osmangazi Köprüsü',
-      'Fatih Sultan Mehmet Köprüsü',
-      '15 Temmuz Şehitler Köprüsü',
-      'Yavuz Sultan Selim Köprüsü',
-    ];
+    // Gerçek gişe isimlerini rota verisinden çıkar
+    final List<String> tollNames = [];
+    final Set<String> processedNames = {};
 
-    return List.generate(
-      widget.routeIndex + 1,
-      (index) => tollNames[index % tollNames.length],
-    );
+    for (final leg in widget.route.legs) {
+      for (final step in leg.steps) {
+        for (final intersection in step.intersections) {
+          if (intersection.tollCollection != null) {
+            final tollName = intersection.tollCollection!.name;
+            if (tollName.isNotEmpty && !processedNames.contains(tollName)) {
+              tollNames.add(tollName);
+              processedNames.add(tollName);
+            }
+          }
+        }
+      }
+    }
+
+    // Eğer rota verisinden gişe bulunamazsa, boş liste döndür
+    return tollNames;
+  }
+
+  bool _hasMissingTollSegments() {
+    if ((widget.route.tollCost ?? 0) == 0) return false;
+
+    // Gişe sayısı ile ücret segment sayısı karşılaştır
+    final tollNames = _getTollDetails();
+    if (tollNames.length < 2) return false; // En az 2 gişe olması lazım
+
+    // Eğer gişe sayısı 2'den fazla ama ücret 0 ise eksik segment var demektir
+    // Veya debug loglarından gördüğümüz gibi bazı segmentlerin ücreti bulunamadıysa
+    return tollNames.length >= 2 && (widget.route.tollCost ?? 0) < 50; // Mantıklı bir eşik değeri
   }
 
   @override
@@ -3119,6 +3232,33 @@ class _RouteDetailsDialogState extends State<RouteDetailsDialog> {
                             tollName,
                             subtitle: 'Bu gişeden geçiş yapılacak',
                           )),
+                          if (_hasMissingTollSegments()) ...[
+                            Container(
+                              margin: const EdgeInsets.only(top: 12),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 20),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Gişe tespit edildi fakat bazı segmentlerin ücreti bulunamadı. Gerçek gişe ücreti daha yüksek olabilir, dikkat ediniz.',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.orange.shade800,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                       const SizedBox(height: 24),

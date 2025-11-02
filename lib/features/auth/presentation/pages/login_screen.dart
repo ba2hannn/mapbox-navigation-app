@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_design.dart';
+import '../../../../core/widgets/animated_notification.dart';
 import '../../data/repositories/auth_repository.dart';
 import 'register_screen.dart';
 import '../../../map/presentation/pages/map_screen.dart';
@@ -45,15 +46,10 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString()),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
+        NotificationHelper.show(
+          context,
+          e.toString(),
+          isError: true,
         );
       }
     } finally {
@@ -67,11 +63,10 @@ class _LoginScreenState extends State<LoginScreen> {
     final email = _emailController.text.trim();
     
     if (email.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Lütfen e-posta adresinizi girin'),
-          backgroundColor: Colors.orange,
-        ),
+      NotificationHelper.show(
+        context,
+        'Lütfen e-posta adresinizi girin',
+        isError: true,
       );
       return;
     }
@@ -80,24 +75,17 @@ class _LoginScreenState extends State<LoginScreen> {
       await _authService.resetPassword(email);
       
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Şifre sıfırlama bağlantısı $email adresine gönderildi'),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
+        NotificationHelper.show(
+          context,
+          'Şifre sıfırlama bağlantısı $email adresine gönderildi',
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString()),
-            backgroundColor: Colors.red,
-          ),
+        NotificationHelper.show(
+          context,
+          e.toString(),
+          isError: true,
         );
       }
     }

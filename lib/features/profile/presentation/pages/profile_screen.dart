@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/theme/app_design.dart';
+import '../../../../core/widgets/animated_notification.dart';
 import '../../../vehicles/presentation/pages/vehicles_list_screen.dart';
 import '../../../auth/data/repositories/auth_repository.dart';
 import '../../../../core/services/analytics_service.dart';
@@ -363,20 +364,17 @@ class _ProfileScreenState extends State<ProfileScreen>
                               });
                               if (context.mounted) {
                                 Navigator.pop(context);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Profil güncellendi'),
-                                    backgroundColor: Colors.green,
-                                  ),
+                                NotificationHelper.show(
+                                  context,
+                                  'Profil güncellendi',
                                 );
                               }
                             } catch (e) {
                               if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Hata: $e'),
-                                    backgroundColor: Colors.red,
-                                  ),
+                                NotificationHelper.show(
+                                  context,
+                                  'Hata: $e',
+                                  isError: true,
                                 );
                               }
                             }
@@ -457,10 +455,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                                       padding: EdgeInsets.zero,
                                       onPressed: () {
                                         debugPrint('Fotoğraf değiştir');
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(
-                                            content: Text('Fotoğraf değiştirme özelliği yakında eklenecek'),
-                                          ),
+                                        NotificationHelper.show(
+                                          context,
+                                          'Fotoğraf değiştirme özelliği yakında eklenecek',
                                         );
                                       },
                                       icon: const Icon(
@@ -934,14 +931,9 @@ class _ProfileScreenState extends State<ProfileScreen>
               ),
             );
           } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('🚧 ${item['title']} özelliği yakında eklenecek'),
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
+            NotificationHelper.show(
+              context,
+              '${item['title']} özelliği yakında eklenecek',
             );
           }
         },

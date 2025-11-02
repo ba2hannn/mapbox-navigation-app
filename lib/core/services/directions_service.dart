@@ -211,6 +211,7 @@ class Route {
   RouteType? routeType;
   double? tollCost;
   RouteSummary? summary;
+  final List<String>? missingTollSegments; // Eksik ücret segmentleri
 
   Route({
     required this.distance,
@@ -222,6 +223,7 @@ class Route {
     this.routeType,
     this.tollCost,
     this.summary,
+    this.missingTollSegments,
   });
 
   factory Route.fromJson(Map<String, dynamic> json) {

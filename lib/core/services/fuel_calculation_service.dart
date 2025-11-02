@@ -31,27 +31,18 @@ class FuelCalculationService {
     double? elevationGain,
     double? averageSlope,
   }) async {
-    debugPrint('🔄 YAKIT VERİLERİ HESAPLANIYOR...');
-    debugPrint('🚗 ARAÇ: ${vehicle.brand} ${vehicle.model}');
-    debugPrint('⛽ YAKIT TÜRÜ: ${vehicle.fuelType}');
-    debugPrint('📏 MESAFE: ${distanceKm.toStringAsFixed(2)} km');
-
     // Önce gerçek tüketim verilerini kontrol et
     final actualAverageConsumption = await _getAverageConsumption(vehicle.id);
-    debugPrint('📊 GERÇEK ORTALAMA TÜKETİM: ${actualAverageConsumption?.toStringAsFixed(2)} L/100km');
 
     double baseConsumption;
 
     if (actualAverageConsumption != null && actualAverageConsumption > 0) {
       // Gerçek veriler varsa onları kullan
       baseConsumption = actualAverageConsumption;
-      debugPrint('✅ GERÇEK TÜKETİM VERİSİ KULLANILIYOR: ${baseConsumption.toStringAsFixed(2)} L/100km');
     } else if (vehicle.cityConsumption != null && vehicle.highwayConsumption != null) {
       // Gerçek veri yoksa kullanıcı girişlerini kullan
       baseConsumption = (vehicle.cityConsumption! + vehicle.highwayConsumption!) / 2;
-      debugPrint('✅ KULLANICI TÜKETİM VERİSİ KULLANILIYOR: ${baseConsumption.toStringAsFixed(2)} L/100km (şehir: ${vehicle.cityConsumption}, şehir dışı: ${vehicle.highwayConsumption})');
     } else {
-      debugPrint('❌ TÜKETİM VERİSİ BULUNAMADI - 0 DÖNDÜRÜLÜYOR');
       return {'cost': 0.0, 'liters': 0.0}; // Veri yok
     }
 
@@ -59,7 +50,6 @@ class FuelCalculationService {
     double trafficFactor = 1.0;
     if (trafficLevel != null) {
       trafficFactor = getTrafficFactor(trafficLevel, averageSpeed: averageSpeed);
-      debugPrint('🚦 TRAFİK FAKTÖRÜ: ${trafficFactor.toStringAsFixed(2)}x (seviye: $trafficLevel, hız: ${averageSpeed?.toStringAsFixed(1)} km/h)');
     }
 
     // Eğim faktörünü hesapla
@@ -70,23 +60,16 @@ class FuelCalculationService {
         distanceKm,
         averageSlope: averageSlope,
       );
-      debugPrint('🏔️ EĞİM FAKTÖRÜ: ${elevationFactor.toStringAsFixed(2)}x (yükseklik artışı: ${elevationGain?.toStringAsFixed(0)}m, ortalama eğim: ${averageSlope?.toStringAsFixed(1)}%)');
     }
 
     // Toplam faktörü uygula
     final totalFactor = trafficFactor * elevationFactor;
     final adjustedConsumption = baseConsumption * totalFactor;
-    debugPrint('🔧 DÜZENLENMİŞ TÜKETİM: ${adjustedConsumption.toStringAsFixed(2)} L/100km (toplam faktör: ${totalFactor.toStringAsFixed(2)}x)');
 
     // Yakıt maliyeti hesapla
     final fuelPricePerLiter = getFuelPrice(vehicle.fuelType);
-    debugPrint('💰 YAKIT FİYATI: ${fuelPricePerLiter.toStringAsFixed(2)} TL/L');
-
     final fuelNeeded = (distanceKm * adjustedConsumption) / 100; // litre
-    debugPrint('⛽ GEREKLİ YAKIT: ${fuelNeeded.toStringAsFixed(2)} L');
-
     final fuelCost = fuelNeeded * fuelPricePerLiter;
-    debugPrint('💸 TOPLAM YAKIT MALİYETİ: ${fuelCost.toStringAsFixed(2)} TL');
 
     return {'cost': fuelCost, 'liters': fuelNeeded};
   }
