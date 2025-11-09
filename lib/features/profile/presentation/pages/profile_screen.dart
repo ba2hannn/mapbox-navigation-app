@@ -11,6 +11,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../core/services/saved_places_service.dart';
 import '../../../legal/presentation/pages/privacy_policy_screen.dart';
 import '../../../legal/presentation/pages/terms_of_service_screen.dart';
+import 'help_support_screen.dart';
+import 'settings_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -944,6 +946,13 @@ class _ProfileScreenState extends State<ProfileScreen>
                 builder: (context) => const VehiclesListScreen(),
               ),
             );
+          } else if (item['title'] == 'Ayarlar') {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const SettingsScreen(),
+              ),
+            );
           } else if (item['title'] == 'Gizlilik Politikası') {
             Navigator.push(
               context,
@@ -956,6 +965,13 @@ class _ProfileScreenState extends State<ProfileScreen>
               context,
               MaterialPageRoute(
                 builder: (context) => const TermsOfServiceScreen(),
+              ),
+            );
+          } else if (item['title'] == 'Yardım & Destek') {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const HelpSupportScreen(),
               ),
             );
           } else {
