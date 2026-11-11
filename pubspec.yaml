@@ -1,7 +1,7 @@
 name: rotonomi
 description: "Akıllı Rota ve Seyahat Yönetim Uygulaması"
 # publish_to: 'none' # Yayın için kaldırıldı
-version: 1.0.0+1
+version: 1.0.0+2
 
 environment:
   sdk: ^3.9.2
